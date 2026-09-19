@@ -109,13 +109,15 @@ Las plazas en espiga (60° o 45°), el margen, la voz y la entrada marcha atrás
 
 ## Cómo funciona
 
-- `devicemotion` entrega la velocidad angular en los tres ejes del móvil. Se proyecta sobre el vector
-  vertical (tomado de la gravedad con el coche parado) para obtener el giro del coche sobre el suelo,
-  independiente de cómo esté colocado el móvil.
-- Se integra en el tiempo restando el sesgo medido en reposo. Cada vez que el coche pasa 1,5 s parado,
-  el sesgo y la vertical se recalibran solos.
+- `deviceorientation` entrega la orientación completa del móvil (alfa, beta, gamma), que el sistema
+  calcula fusionando giroscopio y acelerómetro. Con ella se monta la matriz de rotación y se mira
+  hacia dónde apunta, sobre el plano horizontal, el eje del móvil que esté más tumbado al marcar la
+  referencia. El cambio de ese rumbo es el giro del coche sobre el suelo. Inclinar el móvil no lo
+  altera, y no depende de cómo numere cada sistema los ejes del giroscopio (en el iPhone no
+  coinciden con Android, y la versión anterior contaba la inclinación como giro).
+- `devicemotion` solo se usa para saber si hay giroscopio y para detectar que el móvil se manipula.
 - Precisión esperable en una maniobra de menos de un minuto: en torno a ±1°. En rampas pronunciadas empeora.
-- Sin giroscopio se usa la brújula del navegador (`deviceorientation`), bastante menos fiable dentro de un coche.
+- Sin giroscopio, la orientación sale de la brújula, bastante menos fiable dentro de un coche.
 
 ## Archivos
 

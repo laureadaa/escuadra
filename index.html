@@ -360,15 +360,12 @@
     fuente: null,            // 'giro' | 'brujula' | 'sim'
     giro: 0,                 // grados girados desde la referencia (+ izquierda)
     vel: 0,                  // °/s
-    sesgo: 0,                // deriva del giroscopio en reposo, °/s
-    G: null,                 // vector "arriba" en ejes del móvil (de la gravedad)
-    tAnterior: null,
-    alfaAnterior: null,
-    tAlfa: null,
+    eje: null,               // eje del móvil cuyo rumbo se sigue (el más tumbado al calibrar)
+    rumboRef: 0,             // rumbo de ese eje al marcar la referencia
+    G: null, Gm: null,       // gravedad calibrada y gravedad filtrada (para detectar manipulación)
+    tAnterior: null, tGiro: null, giroAnterior: 0,
     cal: null,               // acumuladores de calibración
-    quieto: null,            // acumuladores de reposo durante la guía
-    giroVisto: false,
-    brujulaVista: false,
+    orientacionVista: false, giroscopioVisto: false,
     lado: 0,                 // +1 izquierda, -1 derecha, 0 aún no se sabe
     zona: 'sin',             // sin | lejos | cerca | ok | pasado
     mensaje: null,           // { texto, tono }
@@ -386,80 +383,92 @@
                  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
   /* ───────────── Sensores ─────────────
-     El giroscopio da velocidad angular en los tres ejes DEL MÓVIL. Como el móvil va
-     en un soporte con cualquier inclinación, ningún eje coincide con la vertical.
-     Proyectamos la velocidad angular sobre el vector "arriba" (obtenido de la gravedad
-     con el coche parado) y así sale el giro del coche sobre el suelo, esté el móvil
-     como esté. Después integramos en el tiempo, restando la deriva medida en reposo. */
+     El navegador entrega la orientación completa del móvil (deviceorientation: alfa, beta y
+     gamma), que el sistema calcula fusionando giroscopio y acelerómetro. Con ella se monta la
+     matriz de rotación y se mira hacia dónde apunta, sobre el plano horizontal, uno de los ejes
+     del móvil (el que esté más tumbado al marcar la referencia). Lo que cambia ese rumbo es el
+     giro del coche sobre el suelo: inclinar el móvil no lo altera, y no depende de cómo numere
+     cada sistema los ejes del giroscopio, que es lo que fallaba en el iPhone. */
 
+  function matrizOrientacion(alfa, beta, gamma) {
+    const r = Math.PI / 180;
+    const cZ = Math.cos(alfa * r), sZ = Math.sin(alfa * r);
+    const cX = Math.cos(beta * r), sX = Math.sin(beta * r);
+    const cY = Math.cos(gamma * r), sY = Math.sin(gamma * r);
+    // Filas: este, norte, arriba. Columnas: ejes x, y, z del móvil (fórmula de la especificación).
+    return [
+      [cZ * cY - sZ * sX * sY, -cX * sZ, cY * sZ * sX + cZ * sY],
+      [cY * sZ + cZ * sX * sY,  cZ * cX, sZ * sY - cZ * cY * sX],
+      [-cX * sY,                sX,      cX * cY],
+    ];
+  }
+  // Rumbo (0..360, horario visto desde arriba) del eje k del móvil sobre el plano horizontal,
+  // y cuánto de horizontal está ese eje (0 = vertical, 1 = tumbado del todo).
+  function rumboEje(M, k) {
+    const e = M[0][k], n = M[1][k];
+    return { rumbo: (Math.atan2(e, n) * 180 / Math.PI + 360) % 360, horizontal: Math.hypot(e, n) };
+  }
+  const difAngulo = (a, b) => { let d = a - b; while (d > 180) d -= 360; while (d < -180) d += 360; return d; };
+
+  function alOrientarse(e) {
+    if (e.alpha == null || e.beta == null || e.gamma == null) return;
+    st.orientacionVista = true;
+    if (cfg.sim) return;
+    const M = matrizOrientacion(e.alpha, e.beta, e.gamma);
+    const t = e.timeStamp;
+
+    if (st.fase === 'calibrando' && st.cal) {
+      // Se elige el eje más tumbado y se acumula su rumbo para ver si el coche está quieto.
+      const c = st.cal;
+      if (c.eje == null) {
+        let mejor = 0, h = -1;
+        for (let k = 0; k < 3; k++) { const q = rumboEje(M, k); if (q.horizontal > h) { h = q.horizontal; mejor = k; } }
+        c.eje = mejor;
+      }
+      const q = rumboEje(M, c.eje);
+      if (c.n === 0) c.primero = q.rumbo;
+      const d = difAngulo(q.rumbo, c.primero);
+      c.n++; c.suma += d; c.cuad += d * d;
+      return;
+    }
+    if (st.fase !== 'guiando' || st.eje == null) return;
+
+    const q = rumboEje(M, st.eje);
+    // Giro positivo = izquierda (antihorario visto desde arriba); el rumbo crece en horario.
+    const giro = -difAngulo(q.rumbo, st.rumboRef);
+    // Se sigue de forma continua, sin saltos de 360° aunque el coche dé más de media vuelta.
+    st.giro += difAngulo(giro, st.giro);
+    if (st.tGiro != null) {
+      const dt = (t - st.tGiro) / 1000;
+      if (dt > 0.01 && dt < 0.5) st.vel = st.vel * 0.7 + (difAngulo(giro, st.giroAnterior) / dt) * 0.3;
+    }
+    st.tGiro = t; st.giroAnterior = giro;
+  }
+
+  // El acelerómetro solo sirve para saber si el móvil está fijo o lo están manipulando, y
+  // rotationRate para saber si el aparato tiene giroscopio de verdad.
   function alMoverse(e) {
-    const w = e.rotationRate, a = e.accelerationIncludingGravity;
-    if (!w || w.alpha == null || !a || a.x == null) return;
-    st.giroVisto = true;
-    if (cfg.sim || st.fuente === 'brujula') return;
-
+    const a = e.accelerationIncludingGravity, w = e.rotationRate;
+    if (w && w.alpha != null) st.giroscopioVisto = true;
+    if (!a || a.x == null || cfg.sim) return;
     const t = e.timeStamp;
     let dt = st.tAnterior == null ? 0 : (t - st.tAnterior) / 1000;
     st.tAnterior = t;
-    if (dt < 0 || dt > 0.25) dt = 0;          // pestaña en segundo plano, saltos de reloj
+    if (dt < 0 || dt > 0.25) dt = 0;
 
-    const s = ES_IOS ? -1 : 1;                // iOS da la gravedad con el signo contrario
-    const gx = a.x * s, gy = a.y * s, gz = a.z * s;
+    const g = [a.x, a.y, a.z];
+    if (!st.Gm) st.Gm = g.slice();
+    else { const k = 0.15; for (let i = 0; i < 3; i++) st.Gm[i] += (g[i] - st.Gm[i]) * k; }
+    if (st.fase === 'calibrando' && st.cal) { st.cal.G = st.Gm.slice(); return; }
+    if (st.fase !== 'guiando' || !st.G) return;
 
-    // Fuera de la guía seguimos la gravedad con un filtro suave. Durante la guía se
-    // congela: frenazos y acelerones falsearían la vertical.
-    if (!st.G) st.G = [gx, gy, gz];
-    else if (st.fase !== 'guiando') {
-      const k = 0.05;
-      st.G[0] += (gx - st.G[0]) * k; st.G[1] += (gy - st.G[1]) * k; st.G[2] += (gz - st.G[2]) * k;
-    }
-    const n = Math.hypot(st.G[0], st.G[1], st.G[2]) || 1;
-
-    // rotationRate: beta = eje x, gamma = eje y, alpha = eje z (°/s)
-    const bruto = (w.beta * st.G[0] + w.gamma * st.G[1] + w.alpha * st.G[2]) / n;
-
-    if (st.fase === 'calibrando' && st.cal) {
-      const c = st.cal;
-      c.n++; c.suma += bruto; c.cuad += bruto * bruto;
-      c.g[0] += gx; c.g[1] += gy; c.g[2] += gz;
-      st.vel = bruto - st.sesgo;
-      return;
-    }
-
-    const vel = bruto - st.sesgo;
-    const velAntes = st.vel;
-    st.vel = vel;
-    if (st.fase !== 'guiando') return;
-
-    // Integración trapezoidal: media de la velocidad entre dos muestras, algo más fina
-    // que tomar solo la última cuando el giro acelera o frena.
-    st.giro += (vel + velAntes) / 2 * dt;
-
-    // Corrección en reposo: si el coche lleva 1,5 s parado, lo que marque el
-    // giroscopio es deriva pura. Se reajusta el sesgo y se refresca la vertical.
-    const acel = Math.hypot(gx, gy, gz);
-    const q = st.quieto || (st.quieto = nuevoReposo());
-    if (Math.abs(vel) < 0.4 && Math.abs(acel - n) < 0.35) {
-      q.t += dt; q.n++; q.suma += bruto; q.g[0] += gx; q.g[1] += gy; q.g[2] += gz;
-      if (q.t >= 1.5 && q.n > 20) {
-        st.sesgo += 0.5 * (q.suma / q.n - st.sesgo);
-        st.G = [q.g[0] / q.n, q.g[1] / q.n, q.g[2] / q.n];
-        st.quieto = nuevoReposo();
-      }
-    } else {
-      st.quieto = nuevoReposo();
-    }
-
-    // ¿Se está manipulando el móvil? Un coche aparcando gira sobre la vertical con la gravedad
-    // quieta y sin tirones. Si el móvil se inclina respecto a la vertical calibrada o recibe
-    // sacudidas, casi seguro que lo han cogido con la mano: se avisa (sin parar la medida,
-    // porque un bache en el garaje también podría dispararlo).
-    if (!st.Gm) st.Gm = [gx, gy, gz];
-    else { const k = 0.15; st.Gm[0] += (gx - st.Gm[0]) * k; st.Gm[1] += (gy - st.Gm[1]) * k; st.Gm[2] += (gz - st.Gm[2]) * k; }
-    const nm = Math.hypot(st.Gm[0], st.Gm[1], st.Gm[2]) || 1;
+    // Un coche aparcando gira sobre la vertical con la gravedad quieta y sin tirones. Si el
+    // móvil se inclina respecto a la postura calibrada o recibe sacudidas, casi seguro que lo
+    // han cogido con la mano: se avisa (sin parar la medida: un bache también podría dispararlo).
+    const n = Math.hypot(st.G[0], st.G[1], st.G[2]) || 1, nm = Math.hypot(st.Gm[0], st.Gm[1], st.Gm[2]) || 1;
     const cosInc = (st.Gm[0] * st.G[0] + st.Gm[1] * st.G[1] + st.Gm[2] * st.G[2]) / (nm * n);
     const inclinado = cosInc < Math.cos(12 * Math.PI / 180);
-    const sacudido = Math.abs(acel - n) > 3;
+    const sacudido = Math.abs(Math.hypot(g[0], g[1], g[2]) - n) > 3;
     st.tManip = inclinado || sacudido ? (st.tManip || 0) + dt : 0;
     if (st.tManip > 0.4 && !st.mensajeMovil) {
       st.mensajeMovil = true;
@@ -469,23 +478,12 @@
     st.tEstable = inclinado || sacudido ? 0 : (st.tEstable || 0) + dt;
     if (st.mensajeMovil && st.tEstable > 3) { st.mensajeMovil = false; if (st.mensaje && st.mensaje.texto.startsWith('Parece que el móvil')) st.mensaje = null; }
   }
-  const nuevoReposo = () => ({ t: 0, n: 0, suma: 0, g: [0, 0, 0] });
 
-  // Plan B para aparatos sin giroscopio: la brújula del navegador. Menos fina,
-  // y sensible a los hierros del coche, pero mejor que nada.
-  function alOrientarse(e) {
-    if (e.alpha == null) return;
-    st.brujulaVista = true;
-    if (cfg.sim || st.fuente !== 'brujula') return;
-    const t = e.timeStamp;
-    if (st.alfaAnterior != null) {
-      let d = e.alpha - st.alfaAnterior;
-      if (d > 180) d -= 360; else if (d < -180) d += 360;
-      const dt = (t - st.tAlfa) / 1000;
-      if (dt > 0 && dt < 0.5) st.vel = st.vel * 0.7 + (d / dt) * 0.3;
-      if (st.fase === 'guiando') st.giro += d;
-    }
-    st.alfaAnterior = e.alpha; st.tAlfa = t;
+  async function pedirPermiso(Clase) {
+    try {
+      if (Clase && typeof Clase.requestPermission === 'function') return (await Clase.requestPermission()) === 'granted';
+    } catch { /* navegadores sin petición de permiso */ }
+    return true;
   }
 
   async function activarSensores() {
@@ -495,16 +493,14 @@
 
     if (cfg.sim) { st.fuente = 'sim'; st.fase = 'lista'; st.mensaje = null; return; }
 
-    try {
-      if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
-        const r = await DeviceMotionEvent.requestPermission();
-        if (r !== 'granted') {
-          st.fase = 'sinSensor';
-          st.mensaje = { tono: 'error', texto: 'Has dicho que no al permiso de movimiento. Recarga la página y acepta.' };
-          return;
-        }
-      }
-    } catch { /* navegadores sin petición de permiso */ }
+    // iPhone: pide permiso para movimiento y orientación (deben salir de un toque en pantalla).
+    const okMov = await pedirPermiso(typeof DeviceMotionEvent !== 'undefined' ? DeviceMotionEvent : null);
+    const okOri = await pedirPermiso(typeof DeviceOrientationEvent !== 'undefined' ? DeviceOrientationEvent : null);
+    if (!okMov || !okOri) {
+      st.fase = 'sinSensor';
+      st.mensaje = { tono: 'error', texto: 'Has dicho que no al permiso de movimiento. Recarga la página y acepta.' };
+      return;
+    }
 
     window.addEventListener('devicemotion', alMoverse);
     window.addEventListener('deviceorientation', alOrientarse);
@@ -514,10 +510,10 @@
 
   function elegirFuente() {
     if (st.fase !== 'buscando') return;
-    if (st.giroVisto) { st.fuente = 'giro'; st.fase = 'lista'; }
-    else if (st.brujulaVista) {
-      st.fuente = 'brujula'; st.fase = 'lista';
-      st.mensaje = { tono: 'error', texto: 'Este aparato no tiene giroscopio. Uso la brújula, que es menos precisa dentro de un coche.' };
+    if (st.orientacionVista) {
+      st.fuente = st.giroscopioVisto ? 'giro' : 'brujula';
+      st.fase = 'lista';
+      if (!st.giroscopioVisto) st.mensaje = { tono: 'error', texto: 'Este aparato no tiene giroscopio. Uso la brújula, que es menos precisa dentro de un coche.' };
     } else {
       st.fase = 'sinSensor';
       st.mensaje = {
@@ -540,34 +536,33 @@
     }
     st.fase = 'calibrando';
     st.mensaje = null;
-    st.cal = { n: 0, suma: 0, cuad: 0, g: [0, 0, 0] };
-    setTimeout(terminarCalibracion, st.fuente === 'brujula' ? 900 : 2000);
+    st.cal = { n: 0, suma: 0, cuad: 0, eje: null, primero: 0, G: null };
+    setTimeout(terminarCalibracion, 2000);
   }
 
   function terminarCalibracion() {
     if (st.fase !== 'calibrando') return;
     const c = st.cal; st.cal = null;
-
-    if (st.fuente === 'giro') {
-      if (!c || c.n < 20) {
-        st.fase = 'lista';
-        st.mensaje = { tono: 'error', texto: 'Se ha perdido el sensor. Pulsa otra vez.' };
-        return;
-      }
-      const media = c.suma / c.n;
-      const desv = Math.sqrt(Math.max(0, c.cuad / c.n - media * media));
-      if (desv > 1.2 || Math.abs(media) > 3) {
-        st.fase = 'lista';
-        st.mensaje = { tono: 'error', texto: 'Te estabas moviendo. Para del todo y pulsa otra vez.' };
-        tono(240, 220);
-        return;
-      }
-      st.sesgo = media;
-      st.G = [c.g[0] / c.n, c.g[1] / c.n, c.g[2] / c.n];
+    if (!c || c.n < 15) {
+      st.fase = 'lista';
+      st.mensaje = { tono: 'error', texto: 'Se ha perdido el sensor. Pulsa otra vez.' };
+      return;
     }
+    const media = c.suma / c.n;
+    const desv = Math.sqrt(Math.max(0, c.cuad / c.n - media * media));
+    const limite = st.fuente === 'brujula' ? 3 : 1.2;
+    if (desv > limite || Math.abs(media) > 2 * limite) {
+      st.fase = 'lista';
+      st.mensaje = { tono: 'error', texto: 'Te estabas moviendo. Para del todo y pulsa otra vez.' };
+      tono(240, 220);
+      return;
+    }
+    st.eje = c.eje;
+    st.rumboRef = (c.primero + media + 360) % 360;
+    st.G = c.G || (st.Gm && st.Gm.slice()) || null;
 
-    st.giro = 0; st.lado = 0; st.vel = 0; st.quieto = null; empezarEtapa(1);
-    st.Gm = null; st.tManip = 0; st.tEstable = 0; st.mensajeMovil = false;
+    st.giro = 0; st.giroAnterior = 0; st.tGiro = null; st.lado = 0; st.vel = 0; empezarEtapa(1);
+    st.tManip = 0; st.tEstable = 0; st.mensajeMovil = false;
     st.fase = 'guiando'; st.zona = 'lejos';
     tono(660, 90); tono(990, 120, 0.11);
     decir('Vale, gira');
