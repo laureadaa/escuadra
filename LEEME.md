@@ -51,11 +51,11 @@ todo está en la carpeta. Condiciones:
 ## Uso en el coche
 
 1. Fija el móvil en un soporte rígido. Da igual la inclinación, pero no puede moverse durante la maniobra.
-2. Pulsa **Activar sensores**.
-3. Coloca el coche paralelo al carril, **detente del todo** y pulsa **Marcar referencia**. Durante
-   dos segundos se mide la deriva del giroscopio y la vertical.
-4. Maniobra. Los pitidos se aceleran según te acercas a los 90°; doble tono agudo = recto;
-   doble tono grave = te has pasado.
+2. Pulsa **Empezar**.
+3. Coloca el coche recto en el pasillo, **detente del todo** y pulsa **Estoy recto**. Durante
+   dos segundos la app se calibra; no te muevas.
+4. Maniobra. Los pitidos se aceleran según te acercas; triple pitido agudo = endereza ya; doble
+   tono agudo = recto; doble tono grave = te has pasado.
 
 Da igual hacia dónde mire el coche (norte, este…), de qué lado esté el volante o si la plaza
 queda a la izquierda o a la derecha: la app solo cuenta los grados girados desde la referencia y

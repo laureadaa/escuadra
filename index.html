@@ -226,7 +226,7 @@
       <video id="video" playsinline muted autoplay></video>
       <canvas id="lienzo"></canvas>
       <p class="camara-estado" id="camaraEstado" aria-live="polite"></p>
-      <p class="camara-aviso">Orientativo: reconoce coches delante, no mide distancias. Mira siempre tú.</p>
+      <p class="camara-aviso">Orientativo. No mide distancias.</p>
     </div>
     <!-- Vista desde arriba centrada en tu coche, como una cámara 360: el coche está siempre
          fijo mirando hacia arriba y la escena (plaza, coches vecinos, trayectoria) se mueve a
@@ -255,11 +255,11 @@
       </g>
       <use href="#formaCoche" class="coche" id="coche"/>
     </svg>
-    <p class="nota-escena">Vista orientativa: solo el ángulo está medido. La posición y las distancias son un dibujo.</p>
+    <p class="nota-escena">Dibujo orientativo. Solo el ángulo es real.</p>
   </section>
 
   <section class="lectura" aria-live="polite">
-    <p class="frase" id="frase">Sin referencia</p>
+    <p class="frase" id="frase">Pulsa el botón cuando estés recto</p>
     <p class="cifra" id="cifra">90°</p>
     <div class="datos">
       <span>Girado <b id="girado">0°</b></span>
@@ -274,8 +274,8 @@
       <button type="button" id="simDemo">Ver maniobra de ejemplo</button>
     </div>
     <p class="guia" id="guia"></p>
-    <button class="btn-principal" id="principal" type="button">Activar sensores</button>
-    <p class="aviso">Mide el ángulo, no distancias. No ve bordillos ni personas: mira siempre tú.</p>
+    <button class="btn-principal" id="principal" type="button">Empezar</button>
+    <p class="aviso">No ve coches, bordillos ni personas. Mira tú.</p>
   </section>
 </main>
 
@@ -291,7 +291,7 @@
         <label><input type="radio" name="plaza" value="45">45°<small>espiga</small></label>
         <label><input type="radio" name="plaza" value="linea">En línea<small>45° y contragiro</small></label>
       </div>
-      <p class="ayuda">En línea: marca la referencia paralelo a los coches aparcados, con tu trasera a la altura de la trasera del coche de delante. Marcha atrás girando hacia la acera hasta que avise a los 45°, y luego contragira hasta que diga "recto".</p>
+      <p class="ayuda">En línea: ponte al lado del coche de delante, trasera con trasera, y pulsa el botón. Marcha atrás girando hacia la acera. Cuando avise, volante al otro lado hasta que diga "recto".</p>
     </fieldset>
 
     <fieldset>
@@ -308,29 +308,29 @@
       <label class="interruptor"><span>Pitidos<small>Más rápidos cuanto menos falta, como un sensor de aparcamiento</small></span><input type="checkbox" id="optSonido"></label>
       <label class="interruptor"><span>Voz<small>Dice "endereza", "recto" o "te has pasado" para no mirar la pantalla</small></span><input type="checkbox" id="optVoz"></label>
       <label class="interruptor"><span>Cantar los grados que faltan<small>"Faltan 30… 20… 10". Apagado por defecto</small></span><input type="checkbox" id="optCantar"></label>
-      <label class="interruptor"><span>Aviso de "endereza"<small>Avisa antes de llegar, según lo rápido que gires, para que el coche acabe recto</small></span><input type="checkbox" id="optAnticipar"></label>
+      <label class="interruptor"><span>Aviso de "endereza"<small>Avisa un poco antes, según lo rápido que gires</small></span><input type="checkbox" id="optAnticipar"></label>
     </fieldset>
 
     <fieldset>
       <legend>Aprender de mis maniobras</legend>
-      <label class="interruptor"><span>Ajustar el aviso solo<small>Mide cuánto te pasas tras el aviso y lo adelanta o retrasa la próxima vez. Se guarda en este móvil</small></span><input type="checkbox" id="optAprender"></label>
+      <label class="interruptor"><span>Ajustar el aviso solo<small>Aprende de tus maniobras. Se guarda en este móvil</small></span><input type="checkbox" id="optAprender"></label>
       <div class="interruptor"><span id="aprendidoTexto"></span><button type="button" class="btn-ajustes" id="olvidar">Olvidar</button></div>
     </fieldset>
 
     <fieldset>
       <legend>Dibujo</legend>
-      <label class="interruptor"><span>Entro marcha atrás<small>Dibuja la plaza detrás del coche en vez de delante</small></span><input type="checkbox" id="optAtras"></label>
+      <label class="interruptor"><span>Entro marcha atrás<small>La plaza queda detrás del coche</small></span><input type="checkbox" id="optAtras"></label>
       <label class="interruptor"><span>Invertir sentido de giro<small>Actívalo si el coche del dibujo gira al revés que el tuyo</small></span><input type="checkbox" id="optInvertir"></label>
     </fieldset>
 
     <fieldset>
       <legend>Cámara</legend>
-      <label class="interruptor"><span>Detectar coches con la cámara<small>Orientativo. Con el móvil mirando por el parabrisas reconoce los coches de delante y avisa si uno queda muy cerca a un lado. No mide distancias y no sirve marcha atrás. La primera vez carga unos 18 MB</small></span><input type="checkbox" id="optCamara"></label>
+      <label class="interruptor"><span>Detectar coches con la cámara<small>Orientativo. Ve los coches de delante y avisa si uno está muy cerca. No mide distancias. La primera vez descarga 18 MB</small></span><input type="checkbox" id="optCamara"></label>
     </fieldset>
 
     <fieldset>
       <legend>Pruebas</legend>
-      <label class="interruptor"><span>Modo simulación<small>Sustituye el giroscopio por un deslizador. Para probar en el ordenador</small></span><input type="checkbox" id="optSim"></label>
+      <label class="interruptor"><span>Modo simulación<small>Para probar en el ordenador, sin sensores</small></span><input type="checkbox" id="optSim"></label>
     </fieldset>
 
     <button class="btn-cerrar" value="cerrar">Guardar y cerrar</button>
@@ -481,7 +481,7 @@
         const r = await DeviceMotionEvent.requestPermission();
         if (r !== 'granted') {
           st.fase = 'sinSensor';
-          st.mensaje = { tono: 'error', texto: 'Has denegado el acceso al movimiento. Recarga la página y acepta el permiso.' };
+          st.mensaje = { tono: 'error', texto: 'Has dicho que no al permiso de movimiento. Recarga la página y acepta.' };
           return;
         }
       }
@@ -516,7 +516,7 @@
     if (st.fuente === 'sim') {
       simGiro.value = 0; st.giro = 0; st.giroSim = 0; st.vel = 0; st.lado = 0; empezarEtapa(1);
       st.fase = 'guiando'; st.zona = 'lejos';
-      st.mensaje = null; decir('Referencia marcada'); tono(660, 90); tono(990, 120, 0.11);
+      st.mensaje = null; decir('Vale, gira'); tono(660, 90); tono(990, 120, 0.11);
       return;
     }
     st.fase = 'calibrando';
@@ -532,14 +532,14 @@
     if (st.fuente === 'giro') {
       if (!c || c.n < 20) {
         st.fase = 'lista';
-        st.mensaje = { tono: 'error', texto: 'El giroscopio ha dejado de enviar datos. Marca la referencia otra vez.' };
+        st.mensaje = { tono: 'error', texto: 'Se ha perdido el sensor. Pulsa otra vez.' };
         return;
       }
       const media = c.suma / c.n;
       const desv = Math.sqrt(Math.max(0, c.cuad / c.n - media * media));
       if (desv > 1.2 || Math.abs(media) > 3) {
         st.fase = 'lista';
-        st.mensaje = { tono: 'error', texto: 'El coche se estaba moviendo. Detente del todo y marca la referencia otra vez.' };
+        st.mensaje = { tono: 'error', texto: 'Te estabas moviendo. Para del todo y pulsa otra vez.' };
         tono(240, 220);
         return;
       }
@@ -550,7 +550,7 @@
     st.giro = 0; st.lado = 0; st.vel = 0; st.quieto = null; empezarEtapa(1);
     st.fase = 'guiando'; st.zona = 'lejos';
     tono(660, 90); tono(990, 120, 0.11);
-    decir('Referencia marcada');
+    decir('Vale, gira');
   }
 
   /* ───────────── Audio, voz, vibración, pantalla ───────────── */
@@ -655,7 +655,7 @@
     if (z !== antes) {
       if (z === 'ok') {
         tono(784, 110); tono(1175, 260, 0.12); vibrar([60, 40, 120]);
-        decir(cfg.linea && st.etapa === 1 ? 'Cuarenta y cinco. Gira el volante al otro lado' : 'Recto');
+        decir(cfg.linea && st.etapa === 1 ? 'Volante al otro lado' : 'Recto');
       }
       if (z === 'pasado' && antes === 'ok') { decir('Te has pasado'); vibrar(200); }
       st.proximoPitido = 0;
@@ -708,7 +708,7 @@
     st.enderezaAvisado = true;
     tono(1046, 60); tono(1046, 60, 0.09); tono(1046, 60, 0.18);
     vibrar([40, 30, 40, 30, 40]);
-    decir(cfg.linea && st.etapa === 1 ? 'Ya. Al otro lado' : 'Endereza');
+    decir(cfg.linea && st.etapa === 1 ? 'Ya, al otro lado' : 'Endereza');
     if (cfg.aprender) st.aprendizaje = { min: falta, hasta: ahora + 5000 };
   }
 
@@ -732,18 +732,18 @@
         simulador = $('simulador'), simGiro = $('simGiro'), dlg = $('ajustes');
 
   const GUIAS = {
-    inicio:     'Fija el móvil en el soporte. No hace falta que quede recto, solo que no se mueva.',
+    inicio:     'Pon el móvil en el soporte y pulsa el botón.',
     buscando:   'Buscando el giroscopio…',
     sinSensor:  '',
-    lista:      'Pon el coche paralelo al carril, detente y marca la referencia.',
-    calibrando: 'Quieto dos segundos. Estoy midiendo la deriva del giroscopio.',
-    guiando:    'Maniobra hacia la plaza. Si cambias de plaza, marca la referencia otra vez.',
-    linea1:     'Volante hacia la acera y marcha atrás despacio. Te aviso al llegar a 45°.',
-    linea2:     'Volante al otro lado y sigue atrás hasta quedar paralelo a la acera.',
+    lista:      'Para el coche recto en el pasillo y pulsa el botón.',
+    calibrando: 'No te muevas. Dos segundos.',
+    guiando:    'Gira hacia la plaza y sigue los pitidos.',
+    linea1:     'Volante hacia la acera y marcha atrás despacio.',
+    linea2:     'Volante al otro lado y sigue marcha atrás.',
   };
   const BOTONES = {
-    inicio: 'Activar sensores', buscando: 'Buscando…', sinSensor: 'Probar con simulación',
-    lista: 'Marcar referencia', calibrando: 'Midiendo…', guiando: 'Marcar referencia',
+    inicio: 'Empezar', buscando: 'Buscando…', sinSensor: 'Probar con simulación',
+    lista: 'Estoy recto', calibrando: 'Espera…', guiando: 'Estoy recto',
   };
   const FUENTES = { giro: 'giroscopio', brujula: 'brújula', sim: 'simulación' };
 
@@ -806,25 +806,25 @@
 
     const etapa1 = cfg.linea && st.etapa === 1;
     if (!guiando) {
-      poner(frase, 'text', 'Sin referencia');
+      poner(frase, 'text', 'Pulsa el botón cuando estés recto');
       poner(cifra, 'text', (cfg.linea ? ANGULO_LINEA : cfg.objetivo) + '°');
     } else if (cfg.linea) {
       // En línea el número es el ángulo real del coche: sube hasta 45 y vuelve a 0.
       const a = Math.round(avance);
       if (st.zona === 'ok') {
-        poner(frase, 'text', etapa1 ? 'Ahora volante al otro lado' : 'Recto. Endereza el volante');
+        poner(frase, 'text', etapa1 ? 'Volante al otro lado' : 'Recto. Volante derecho');
         poner(cifra, 'text', etapa1 ? a + '°' : 'Recto');
       } else if (st.zona === 'pasado') {
-        poner(frase, 'text', etapa1 ? 'Pasado de 45°: contragira ya' : 'Te has pasado: gira un poco atrás');
+        poner(frase, 'text', etapa1 ? 'Te has pasado. Volante al otro lado' : 'Te has pasado un poco');
         poner(cifra, 'text', a + '°');
       } else {
         poner(frase, 'text', st.enderezaAvisado ? (etapa1 ? 'Ya: volante al otro lado' : 'Endereza ya')
-                                                : (etapa1 ? 'Marcha atrás girando hasta 45°' : 'Contragira hasta 0°'));
+                                                : (etapa1 ? 'Marcha atrás girando' : 'Sigue atrás enderezando'));
         poner(cifra, 'text', a + '°');
       }
     } else if (st.zona === 'ok') {
       const d = Math.abs(falta);
-      poner(frase, 'text', d < 0.5 ? 'Paralelo a las líneas' : `Desviación de ${d.toFixed(0)}°`);
+      poner(frase, 'text', d < 0.5 ? 'Recto en la plaza' : `Recto, ${d.toFixed(0)}° torcido`);
       poner(cifra, 'text', 'Recto');
     } else if (st.zona === 'pasado') {
       poner(frase, 'text', 'Te has pasado');
