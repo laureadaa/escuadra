@@ -74,9 +74,12 @@ otro lado, la escena se pone en espejo sola.
 En batería y espiga el giro termina en la boca de la plaza y el último tramo se hace recto: cuando
 la app dice "recto", el dibujo mete el coche derecho en su sitio.
 
-**Es orientativo.** Lo único medido es el ángulo. La posición sale de suponer un coche de 4,2 m
-con un radio de giro de 3,6 m; con un coche distinto o girando el volante más o menos, la
-trayectoria real cambia. No mires el dibujo para saber a qué distancia estás de nada: mira el coche.
+**Es orientativo.** Lo único medido es el ángulo. La posición sale de las medidas del coche que
+pongas en Ajustes > **Mi coche** (largo, ancho y diámetro de giro entre bordillos, de la ficha
+técnica; por defecto un Smart Fortwo) suponiendo el volante a tope. Con esas medidas la
+trayectoria, el punto de parada y el tramo recto final son los de tu coche. Girando el volante
+menos, la trayectoria real cambia. No mires el dibujo para saber a qué distancia estás de nada:
+mira el coche.
 
 Con "Entro marcha atrás" el coche entra de culo y las plazas se dibujan en consecuencia. En línea
 la escena es una calle con acera, dos coches aparcados y el hueco entre ellos.

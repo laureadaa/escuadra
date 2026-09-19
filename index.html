@@ -77,6 +77,9 @@
     background: var(--asfalto-claro); font-weight: 600; font-size: .9375rem;
   }
   .botones-cabecera { display: flex; gap: .5rem; flex-wrap: wrap; justify-content: flex-end; }
+  .medidas { display: grid; grid-template-columns: repeat(3, 1fr); gap: .5rem; }
+  .medidas label { display: grid; gap: .25rem; font-size: .8125rem; color: var(--pintura-gastada); }
+  .medidas input { font: inherit; color: var(--pintura); background: var(--asfalto-hondo); border: 0; border-radius: .5rem; padding: .5rem; width: 100%; min-width: 0; }
 
   /* Tutorial animado ("Cómo se hace"): rótulo sobre el dibujo, referencias y punto del hombro */
   .esfera { position: relative; }
@@ -235,7 +238,7 @@
 <main class="app" id="app" data-zona="sin">
 
   <header class="cabecera">
-    <div class="marca">Escuadra<span class="sensor" id="sensor"></span><span class="sensor" id="version">v6</span></div>
+    <div class="marca">Escuadra<span class="sensor" id="sensor"></span><span class="sensor" id="version">v7</span></div>
     <div class="botones-cabecera">
       <button class="btn-ajustes" id="abrirComo" type="button">Cómo se hace</button>
       <button class="btn-ajustes" id="abrirAjustes" type="button">Ajustes</button>
@@ -274,8 +277,10 @@
           <g id="fijo"></g>
         </g>
       </g>
-      <use href="#formaCoche" class="coche" id="coche"/>
-      <circle class="hombro" cx="-30" cy="-5" r="9"/>
+      <g id="cocheG">
+        <use href="#formaCoche" class="coche" id="coche"/>
+        <circle class="hombro" cx="-30" cy="-5" r="9"/>
+      </g>
     </svg>
     <p class="tuto-texto" id="tutoTexto"></p>
     <p class="nota-escena">Dibujo orientativo. Solo el ángulo es real.</p>
@@ -343,8 +348,26 @@
     </fieldset>
 
     <fieldset>
+      <legend>Mi coche</legend>
+      <p class="ayuda">Con las medidas de tu coche, la trayectoria y el punto de parada del dibujo salen exactos.</p>
+      <div class="opciones">
+        <label><input type="radio" name="cochePreset" value="smart">Smart Fortwo<small>2,69 m · gira en 6,95 m</small></label>
+        <label><input type="radio" name="cochePreset" value="pequeno">Pequeño<small>3,9 m · gira en 10,4 m</small></label>
+        <label><input type="radio" name="cochePreset" value="medio">Medio<small>4,4 m · gira en 11 m</small></label>
+        <label><input type="radio" name="cochePreset" value="grande">Grande<small>4,8 m · gira en 11,8 m</small></label>
+      </div>
+      <div class="medidas">
+        <label>Largo (m)<input type="number" id="cocheLargo" step="0.01" min="2" max="6" inputmode="decimal"></label>
+        <label>Ancho (m)<input type="number" id="cocheAncho" step="0.01" min="1.4" max="2.2" inputmode="decimal"></label>
+        <label>Giro (m)<input type="number" id="cocheGiro" step="0.1" min="5" max="14" inputmode="decimal"></label>
+      </div>
+      <p class="ayuda">"Giro" es el diámetro de giro entre bordillos, que viene en la ficha técnica del coche.</p>
+    </fieldset>
+
+    <fieldset>
       <legend>Dibujo</legend>
-      <label class="interruptor"><span>Entro marcha atrás<small>La app intenta notarlo sola al moverte. Mientras no lo sepa, usa esto</small></span><input type="checkbox" id="optAtras"></label>
+      <label class="interruptor"><span>Entro marcha atrás<small>Mientras la app no detecte el sentido, usa esto</small></span><input type="checkbox" id="optAtras"></label>
+      <label class="interruptor"><span>Detectar el sentido solo<small>Con el acelerómetro, al arrancar y en curva. Orientativo: si se equivoca, apágalo</small></span><input type="checkbox" id="optSentido"></label>
       <label class="interruptor"><span>Invertir sentido de giro<small>Actívalo si el coche del dibujo gira al revés que el tuyo</small></span><input type="checkbox" id="optInvertir"></label>
     </fieldset>
 
@@ -359,7 +382,7 @@
     </fieldset>
 
     <button class="btn-cerrar" value="cerrar">Guardar y cerrar</button>
-    <p class="ayuda">Escuadra versión 6. Si en la cabecera pone otro número, recarga la app con internet.</p>
+    <p class="ayuda">Escuadra versión 7. Si en la cabecera pone otro número, recarga la app con internet.</p>
   </form>
 </dialog>
 
@@ -372,7 +395,8 @@
   const porDefecto = {
     objetivo: 90, linea: false, tolerancia: 2,
     sonido: true, voz: true, cantar: false, anticipar: true, aprender: true, aprendido: 0,
-    camara: false, atras: false, invertir: false, sim: false,
+    camara: false, atras: false, detectarSentido: true, invertir: false, sim: false,
+    coche: { largo: 2.69, ancho: 1.66, giro: 6.95 },   // Smart Fortwo
   };
   const cfg = Object.assign({}, porDefecto, leerAjustes());
 
@@ -441,6 +465,7 @@
     st.orientacionVista = true;
     if (cfg.sim) return;
     const M = matrizOrientacion(e.alpha, e.beta, e.gamma);
+    st.upDev = [M[2][0], M[2][1], M[2][2]];   // "arriba" en ejes del móvil, sin depender del acelerómetro
     const t = e.timeStamp;
 
     if (st.fase === 'calibrando' && st.cal) {
@@ -512,9 +537,15 @@
     // El eje "adelante" del coche se supone por cómo va el móvil: de pie en el soporte, la
     // trasera del móvil mira adelante; tumbado, la parte de arriba de la pantalla.
     if (dt > 0) {
-      const sg = ES_IOS ? -1 : 1;                                   // iOS da la aceleración con el signo contrario
+      // Signo del acelerómetro: según la especificación, en reposo mide +g hacia arriba, pero
+      // iOS lo da al revés. En vez de suponerlo, se compara la gravedad medida con el "arriba"
+      // que da la orientación del sistema, que no depende del acelerómetro.
+      const upO = st.upDev || [st.G[0] / n, st.G[1] / n, st.G[2] / n];
+      const dot = st.G[0] * upO[0] + st.G[1] * upO[1] + st.G[2] * upO[2];
+      if (Math.abs(dot) > 0.3 * n) st.sg = dot > 0 ? 1 : -1;
+      const sg = st.sg || (ES_IOS ? -1 : 1);
       const lin = [(g[0] - st.G[0]) * sg, (g[1] - st.G[1]) * sg, (g[2] - st.G[2]) * sg];
-      const up = [st.G[0] * sg / n, st.G[1] * sg / n, st.G[2] * sg / n];
+      const up = st.upDev ? st.upDev.slice() : [st.G[0] * sg / n, st.G[1] * sg / n, st.G[2] * sg / n];
       const horiz = v => { const p = v[0] * up[0] + v[1] * up[1] + v[2] * up[2]; return [v[0] - p * up[0], v[1] - p * up[1], v[2] - p * up[2]]; };
       const hz = horiz([0, 0, 1]), hy = horiz([0, 1, 0]);
       const mz = Math.hypot(hz[0], hz[1], hz[2]), my = Math.hypot(hy[0], hy[1], hy[2]) || 1;
@@ -545,7 +576,7 @@
   // durante la maniobra y, mientras no se sepa, el ajuste "Entro marcha atrás".
   function entraAtras() {
     if (cfg.linea) return true;
-    if (st.fase === 'guiando' && st.sentido) return st.sentido < 0;
+    if (cfg.detectarSentido && st.fase === 'guiando' && st.sentido) return st.sentido < 0;
     return cfg.atras;
   }
 
@@ -854,7 +885,8 @@
 
     // Dibujo: tu coche fijo en el centro mirando hacia arriba y la escena moviéndose alrededor.
     const guiando = st.fase === 'guiando';
-    const clave = [cfg.linea, entraAtras(), cfg.objetivo].join();
+    const clave = [cfg.linea, entraAtras(), cfg.objetivo, JSON.stringify(cfg.coche)].join();
+    { const d = dimCoche(); poner($('cocheG'), 'transform', `scale(${d.sx} ${d.sy})`); }
     if (st.escenaClave !== clave) { dibujarEscena(); st.escenaClave = clave; }
     // Plaza a la derecha o a la izquierda: se deduce del sentido del giro. Entrando de frente
     // giras hacia la plaza; marcha atrás (y en línea) el morro gira hacia el lado contrario.
@@ -886,7 +918,7 @@
     poner(app, 'data-refs', refs);
     poner($('tutoTexto'), 'text', tutoTexto);
     // Centro del coche en el mundo; la vista lo lleva al origen con el rumbo hacia arriba.
-    let c = suma(q.p, detras(q.h), -EJE), h = q.h;
+    let c = suma(q.p, detras(q.h), -dimCoche().EJE), h = q.h;
     if (!plazaDerecha) { c = [-c[0], c[1]]; h = -h; }
     poner(vista, 'transform', `rotate(${(-h).toFixed(1)}) translate(${(-c[0]).toFixed(1)} ${(-c[1]).toFixed(1)})`);
 
@@ -937,7 +969,7 @@
     const g = Math.round(Math.abs(giro));
     poner(girado, 'text', st.fase === 'guiando' && g > 0 ? `${g}° a la ${giro > 0 ? 'izquierda' : 'derecha'}` : '0°');
     poner(velocidad, 'text', Math.abs(st.vel).toFixed(0) + '°/s');
-    poner($('sentido'), 'text', !guiando || st.fuente === 'sim' ? '—' : st.sentido > 0 ? 'adelante' : st.sentido < 0 ? 'marcha atrás' : 'aún no lo sé');
+    poner($('sentido'), 'text', !guiando || st.fuente === 'sim' || !cfg.detectarSentido ? '—' : st.sentido > 0 ? 'adelante' : st.sentido < 0 ? 'marcha atrás' : 'aún no lo sé');
 
     const m = st.mensaje;
     const guiaTexto = st.fase === 'guiando' && cfg.linea ? GUIAS[st.etapa === 1 ? 'linea1' : 'linea2'] : GUIAS[st.fase];
@@ -956,8 +988,24 @@
      ángulo, la posición sale de suponer un radio de giro típico. Unidades: 50 por metro; el
      coche dibujado mide 4,2 m. Todo se calcula con la plaza a la derecha; si está a la
      izquierda, el grupo de la escena se dibuja en espejo. Rumbos: 0 = arriba, horario positivo. */
-  const U = 50, R_GIRO = 3.6 * U, EJE = 70;
-  const RECTA_FRENTE = 145, RECTA_ATRAS = 285;   // tramo recto final: el arco termina en la boca de la plaza
+  const U = 50;   // unidades de dibujo por metro (el dibujo base del coche mide 92 x 208 = 1,84 x 4,16 m)
+  // Medidas del coche del usuario (Ajustes > Mi coche). El radio de giro del centro del eje
+  // trasero sale del diámetro de giro entre bordillos: R = sqrt((D/2)² - batalla²) - ancho/2,
+  // con la batalla estimada en el 60 % del largo y el eje trasero al 32 % del largo desde el centro.
+  function dimCoche() {
+    const c = cfg.coche || porDefecto.coche;
+    const k = [c.largo, c.ancho, c.giro].join();
+    if (st.dimClave === k) return st.dim;
+    const LARGO = c.largo * U, ANCHO = c.ancho * U, batalla = 0.6 * c.largo;
+    const R = Math.max(1.5, Math.sqrt(Math.max(0, (c.giro / 2) ** 2 - batalla ** 2)) - c.ancho / 2) * U;
+    const EJE = 0.32 * LARGO;
+    st.dim = { LARGO, ANCHO, EJE, R, sx: ANCHO / 92, sy: LARGO / 208,
+               // Tramo recto final: el arco termina con el eje trasero 1,8 m fuera de la boca de la
+               // plaza (de frente) o con la trasera justo en la boca (marcha atrás).
+               RECTA_FRENTE: (125 - EJE) + 90, RECTA_ATRAS: 145 + LARGO / 2 };
+    st.dimClave = k;
+    return st.dim;
+  }
   const rad = a => a * Math.PI / 180;
   const rot = (v, a) => { const c = Math.cos(rad(a)), s = Math.sin(rad(a)); return [v[0] * c - v[1] * s, v[0] * s + v[1] * c]; };
   const suma = (a, b, k = 1) => [a[0] + b[0] * k, a[1] + b[1] * k];
@@ -965,6 +1013,7 @@
   const detras = h => rot([0, 1], h);         // hacia la parte trasera del coche
 
   function geometria() {
+    const { EJE, R: R_GIRO, ANCHO, RECTA_FRENTE, RECTA_ATRAS } = dimCoche();
     if (cfg.linea) {
       // Final: en el hueco, rumbo -90 (mirando a la izquierda, sentido de la calle).
       const rearF = [EJE, 0];
@@ -986,14 +1035,14 @@
     // El vecino del lado del pivote no debe quedar dentro del barrido del coche: se alarga
     // el tramo recto hasta que todas sus esquinas queden fuera del radio interior del giro.
     // Hace falta sobre todo en espiga, donde el pivote cae muy cerca del vecino.
-    const vecino = suma([0, 0], derecha(hf), 140);
+    const vecino = suma([0, 0], derecha(hf), 120);
     const esquinas = [];
     for (const a of [-1, 1]) for (const b of [-1, 1]) esquinas.push(suma(suma(vecino, derecha(hf), 46 * a), detras(hf), 104 * b));
     let recta = entraAtras() ? RECTA_ATRAS : RECTA_FRENTE, rearE, C;
     for (let i = 0; i < 40; i++, recta += 10) {
       rearE = suma(rearF, haciaCarril, recta);
       C = suma(rearE, derecha(hf), R_GIRO);
-      if (esquinas.every(P => Math.hypot(C[0] - P[0], C[1] - P[1]) >= R_GIRO - 46 + 8)) break;
+      if (esquinas.every(P => Math.hypot(C[0] - P[0], C[1] - P[1]) >= R_GIRO - ANCHO / 2 + 8)) break;
     }
     return { hf, rearF, rearE, C, s };
   }
@@ -1021,30 +1070,32 @@
       for (const k in attrs) e.setAttribute(k, attrs[k]);
       fijo.appendChild(e); return e;
     };
-    const cocheEn = (clase, x, y, h) => {
-      const e = add('use', { class: clase, transform: `translate(${x} ${y}) rotate(${h})` });
+    const cocheEn = (clase, x, y, h, esc) => {
+      const e = add('use', { class: clase, transform: `translate(${x} ${y}) rotate(${h})` + (esc ? ` scale(${esc})` : '') });
       e.setAttributeNS('http://www.w3.org/1999/xlink', 'href', '#formaCoche');
       e.setAttribute('href', '#formaCoche');
     };
     const g = geometria();
+    const { EJE, LARGO, sx, sy } = dimCoche(), esc = `${sx} ${sy}`;
+    const sep = 0.75 * LARGO + 104;   // en línea: hueco de vez y media el largo del coche
 
     if (cfg.linea) {
       add('rect', { class: 'acera', x: -3000, y: -3000, width: 6000, height: 2940 });
       add('line', { class: 'bordillo', x1: -3000, y1: -60, x2: 3000, y2: -60 });
-      cocheEn('vecino', -268, 0, -90); cocheEn('vecino', 268, 0, -90);
+      cocheEn('vecino', -sep, 0, -90); cocheEn('vecino', sep, 0, -90);
     } else {
       const hb = entraAtras() ? 90 - cfg.objetivo : cfg.objetivo - 90;   // inclinación de las plazas
-      for (const x of [-350, -210, -70, 70, 210, 350]) add('line', { class: 'linea-plaza', x1: x, y1: -125, x2: x, y2: 125, transform: `rotate(${hb})` });
+      for (const x of [-300, -180, -60, 60, 180, 300]) add('line', { class: 'linea-plaza', x1: x, y1: -125, x2: x, y2: 125, transform: `rotate(${hb})` });
       const hv = hb + (entraAtras() ? 180 : 0);
-      for (const x of [-280, -140, 140, 280]) cocheEn('vecino', ...rot([x, 0], hb), hv);
+      for (const x of [-240, -120, 120, 240]) cocheEn('vecino', ...rot([x, 0], hb), hv);
     }
 
     // Silueta del sitio final y trayectoria del centro del coche (arco más tramo recto).
     const fin = postura(g, cfg.linea ? 0 : cfg.objetivo, 2, 1);
     const cf = suma(fin.p, detras(fin.h), -EJE);
-    cocheEn('fantasma', cf[0], cf[1], fin.h);
+    cocheEn('fantasma', cf[0], cf[1], fin.h, esc);
     // Puntos que el encuadre debe mantener a la vista: el sitio final y sus vecinos.
-    st.puntosVista = cfg.linea ? [cf, [-268, 0], [268, 0]] : [cf, rot([-140, 0], fin.h), rot([140, 0], fin.h)];
+    st.puntosVista = cfg.linea ? [cf, [-sep, 0], [sep, 0]] : [cf, rot([-120, 0], fin.h), rot([120, 0], fin.h)];
 
     let d = '';
     const N = 48;
@@ -1062,15 +1113,15 @@
     const q0 = postura(g, 0, 1, 0), c0 = suma(q0.p, detras(q0.h), -EJE);
     const refs = document.createElementNS(NS, 'g'); refs.setAttribute('class', 'refs'); fijo.appendChild(refs);
     const addRef = (tag, attrs) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); refs.appendChild(e); return e; };
-    const ghost0 = addRef('use', { class: 'fantasma-inicio', transform: `translate(${c0[0]} ${c0[1]}) rotate(${q0.h})` });
+    const ghost0 = addRef('use', { class: 'fantasma-inicio', transform: `translate(${c0[0]} ${c0[1]}) rotate(${q0.h}) scale(${esc})` });
     ghost0.setAttributeNS('http://www.w3.org/1999/xlink', 'href', '#formaCoche'); ghost0.setAttribute('href', '#formaCoche');
     const dcha = derecha(q0.h);
     if (cfg.linea) {
-      const tras = suma(c0, detras(q0.h), 104);                    // parachoques trasero
+      const tras = suma(c0, detras(q0.h), LARGO / 2);              // parachoques trasero
       const a = suma(tras, dcha, -30), b = suma(tras, dcha, 210);   // hacia la acera, hasta el coche de delante
       addRef('line', { class: 'linea-ref', x1: a[0], y1: a[1], x2: b[0], y2: b[1] });
     } else {
-      const hombro = suma(suma(c0, dcha, -30), detras(q0.h), -5);   // conductor a la izquierda
+      const hombro = suma(suma(c0, dcha, -30 * sx), detras(q0.h), -5 * sy);   // conductor a la izquierda
       const a = suma(hombro, dcha, -50), b = suma(hombro, dcha, 420);
       addRef('line', { class: 'linea-ref', x1: a[0], y1: a[1], x2: b[0], y2: b[1] });
     }
@@ -1226,9 +1277,23 @@
     $('optCamara').checked = cfg.camara;
     $('aprendidoTexto').textContent = textoAprendido();
     $('optAtras').checked = cfg.atras;   $('optInvertir').checked = cfg.invertir;
+    $('optSentido').checked = cfg.detectarSentido;
+    const co = cfg.coche || porDefecto.coche;
+    $('cocheLargo').value = co.largo; $('cocheAncho').value = co.ancho; $('cocheGiro').value = co.giro;
+    dlg.querySelectorAll('[name=cochePreset]').forEach(r => { const p = COCHES[r.value]; r.checked = p.largo === co.largo && p.ancho === co.ancho && p.giro === co.giro; });
     $('optSim').checked = cfg.sim;
   }
   $('abrirAjustes').addEventListener('click', () => { sincronizarAjustes(); dlg.showModal(); });
+  const COCHES = {
+    smart: { largo: 2.69, ancho: 1.66, giro: 6.95 }, pequeno: { largo: 3.9, ancho: 1.7, giro: 10.4 },
+    medio: { largo: 4.4, ancho: 1.8, giro: 11 },     grande: { largo: 4.8, ancho: 1.9, giro: 11.8 },
+  };
+  dlg.querySelectorAll('[name=cochePreset]').forEach(r => r.addEventListener('change', () => {
+    const p = COCHES[r.value]; $('cocheLargo').value = p.largo; $('cocheAncho').value = p.ancho; $('cocheGiro').value = p.giro;
+  }));
+  for (const id of ['cocheLargo', 'cocheAncho', 'cocheGiro']) $(id).addEventListener('input', () => {
+    dlg.querySelectorAll('[name=cochePreset]').forEach(r => r.checked = false);
+  });
 
   /* ───────────── Tutorial animado: "Cómo se hace" ─────────────
      Una maniobra de ejemplo dibujada en la propia escena, paso a paso, con un rótulo corto:
@@ -1283,6 +1348,10 @@
     cfg.anticipar = $('optAnticipar').checked; cfg.aprender = $('optAprender').checked;
     cfg.camara = $('optCamara').checked;
     cfg.atras  = $('optAtras').checked;  cfg.invertir = $('optInvertir').checked;
+    cfg.detectarSentido = $('optSentido').checked;
+    const num =(id, ant, min, max) => { const v = parseFloat($(id).value); return isFinite(v) && v >= min && v <= max ? v : ant; };
+    const co0 = cfg.coche || porDefecto.coche;
+    cfg.coche = { largo: num('cocheLargo', co0.largo, 2, 6), ancho: num('cocheAncho', co0.ancho, 1.4, 2.2), giro: num('cocheGiro', co0.giro, 5, 14) };
     cfg.sim    = $('optSim').checked;
     guardarAjustes(); iniciarAudio();
 
