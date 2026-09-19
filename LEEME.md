@@ -130,8 +130,8 @@ detecta, usa el ajuste "Entro marcha atrás". Se muestra bajo el número grande 
   tardaste. Se ve en Ajustes y se puede borrar.
 - **Comprobar sensores**: en Ajustes, valores en vivo de orientación, aceleración, giro y sentido, con
   botón de copiar, para diagnosticar sin adivinar.
-- **Abrirla sola en el coche**: en Ajustes, los tres pasos de la app Atajos del iPhone para que se abra
-  al conectar CarPlay o el Bluetooth del coche, y para decir "Oye Siri, aparcar".
+- **Abrirla justo al aparcar**: en Ajustes, cómo crear el atajo "Oye Siri, aparcar" y la automatización
+  "Al llegar" a tus sitios habituales con la app Atajos del iPhone.
 
 ## Ayudas para aparcar
 
