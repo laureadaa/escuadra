@@ -76,6 +76,24 @@
     padding: .5rem .875rem; border-radius: 999px;
     background: var(--asfalto-claro); font-weight: 600; font-size: .9375rem;
   }
+  .botones-cabecera { display: flex; gap: .5rem; flex-wrap: wrap; justify-content: flex-end; }
+
+  /* Tutorial animado ("Cómo se hace"): rótulo sobre el dibujo, referencias y punto del hombro */
+  .esfera { position: relative; }
+  .tuto-texto {
+    position: absolute; left: .75rem; right: .75rem; top: .75rem; display: none;
+    padding: .75rem 1rem; border-radius: 1rem; background: rgba(255, 255, 255, .92);
+    color: var(--pintura); font-weight: 700; font-size: 1.125rem; text-align: center; text-wrap: balance;
+    box-shadow: 0 4px 16px rgba(90, 42, 68, .18);
+  }
+  [data-tuto="1"] .tuto-texto { display: block; }
+  .refs, .hombro { opacity: 0; transition: opacity .4s; }
+  .refs .linea-ref { stroke: var(--rosa); stroke-width: 5; stroke-dasharray: 14 10; fill: none; }
+  .refs .fantasma-inicio { opacity: .35; }
+  .hombro { fill: var(--rosa); stroke: #fff; stroke-width: 3; }
+  [data-refs="hombro"] .refs, [data-refs="hombro"] .hombro, [data-refs="trasera"] .refs { opacity: 1; }
+  [data-refs="hombro"] .hombro { animation: latido 1s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+  @keyframes latido { 50% { transform: scale(1.5); } }
 
   /* Esfera (y cámara encima cuando está activada) */
   .esfera { min-height: 0; display: flex; flex-direction: column; gap: .5rem; }
@@ -217,8 +235,11 @@
 <main class="app" id="app" data-zona="sin">
 
   <header class="cabecera">
-    <div class="marca">Escuadra<span class="sensor" id="sensor"></span><span class="sensor" id="version">v5</span></div>
-    <button class="btn-ajustes" id="abrirAjustes" type="button">Ajustes</button>
+    <div class="marca">Escuadra<span class="sensor" id="sensor"></span><span class="sensor" id="version">v6</span></div>
+    <div class="botones-cabecera">
+      <button class="btn-ajustes" id="abrirComo" type="button">Cómo se hace</button>
+      <button class="btn-ajustes" id="abrirAjustes" type="button">Ajustes</button>
+    </div>
   </header>
 
   <section class="esfera">
@@ -254,7 +275,9 @@
         </g>
       </g>
       <use href="#formaCoche" class="coche" id="coche"/>
+      <circle class="hombro" cx="-30" cy="-5" r="9"/>
     </svg>
+    <p class="tuto-texto" id="tutoTexto"></p>
     <p class="nota-escena">Dibujo orientativo. Solo el ángulo es real.</p>
   </section>
 
@@ -264,6 +287,7 @@
     <div class="datos">
       <span>Girado <b id="girado">0°</b></span>
       <span>Velocidad de giro <b id="velocidad">0°/s</b></span>
+      <span>Sentido <b id="sentido">—</b></span>
     </div>
   </section>
 
@@ -278,6 +302,7 @@
     <p class="aviso">No ve coches, bordillos ni personas. Mira tú.</p>
   </section>
 </main>
+
 
 <dialog id="ajustes" aria-labelledby="tituloAjustes">
   <form method="dialog" class="hoja">
@@ -319,7 +344,7 @@
 
     <fieldset>
       <legend>Dibujo</legend>
-      <label class="interruptor"><span>Entro marcha atrás<small>La plaza queda detrás del coche</small></span><input type="checkbox" id="optAtras"></label>
+      <label class="interruptor"><span>Entro marcha atrás<small>La app intenta notarlo sola al moverte. Mientras no lo sepa, usa esto</small></span><input type="checkbox" id="optAtras"></label>
       <label class="interruptor"><span>Invertir sentido de giro<small>Actívalo si el coche del dibujo gira al revés que el tuyo</small></span><input type="checkbox" id="optInvertir"></label>
     </fieldset>
 
@@ -334,7 +359,7 @@
     </fieldset>
 
     <button class="btn-cerrar" value="cerrar">Guardar y cerrar</button>
-    <p class="ayuda">Escuadra versión 5. Si en la cabecera pone otro número, recarga la app con internet.</p>
+    <p class="ayuda">Escuadra versión 6. Si en la cabecera pone otro número, recarga la app con internet.</p>
   </form>
 </dialog>
 
@@ -478,6 +503,50 @@
     }
     st.tEstable = inclinado || sacudido ? 0 : (st.tEstable || 0) + dt;
     if (st.mensajeMovil && st.tEstable > 3) { st.mensajeMovil = false; if (st.mensaje && st.mensaje.texto.startsWith('Parece que el móvil')) st.mensaje = null; }
+
+    // ── ¿Avanza o retrocede? (orientativo) ──
+    // Dos pistas. Al arrancar desde parado, hacia dónde empuja el coche. Y en curva, hacia qué
+    // lado apunta la aceleración respecto al sentido del giro: avanzando y girando a la
+    // izquierda, el coche acelera hacia su izquierda (hacia el centro de la curva); marcha
+    // atrás con el morro yendo a la izquierda, el centro de la curva queda a la derecha.
+    // El eje "adelante" del coche se supone por cómo va el móvil: de pie en el soporte, la
+    // trasera del móvil mira adelante; tumbado, la parte de arriba de la pantalla.
+    if (dt > 0) {
+      const sg = ES_IOS ? -1 : 1;                                   // iOS da la aceleración con el signo contrario
+      const lin = [(g[0] - st.G[0]) * sg, (g[1] - st.G[1]) * sg, (g[2] - st.G[2]) * sg];
+      const up = [st.G[0] * sg / n, st.G[1] * sg / n, st.G[2] * sg / n];
+      const horiz = v => { const p = v[0] * up[0] + v[1] * up[1] + v[2] * up[2]; return [v[0] - p * up[0], v[1] - p * up[1], v[2] - p * up[2]]; };
+      const hz = horiz([0, 0, 1]), hy = horiz([0, 1, 0]);
+      const mz = Math.hypot(hz[0], hz[1], hz[2]), my = Math.hypot(hy[0], hy[1], hy[2]) || 1;
+      const adelante = mz > 0.5 ? hz.map(v => -v / mz) : hy.map(v => v / my);
+      const izquierda = [up[1] * adelante[2] - up[2] * adelante[1], up[2] * adelante[0] - up[0] * adelante[2], up[0] * adelante[1] - up[1] * adelante[0]];
+      const aFwd = lin[0] * adelante[0] + lin[1] * adelante[1] + lin[2] * adelante[2];
+      const aLat = lin[0] * izquierda[0] + lin[1] * izquierda[1] + lin[2] * izquierda[2];
+      const aHor = Math.hypot(aFwd, aLat);
+
+      // Pista 1: arranque desde parado (más de 1 s quieto), se integra 1,2 s la aceleración.
+      if (aHor < 0.25) st.tReposo = (st.tReposo || 0) + dt;
+      else { if (st.arranque == null && (st.tReposo || 0) > 1) st.arranque = { t: 0, v: 0 }; st.tReposo = 0; }
+      if (st.arranque) {
+        st.arranque.t += dt; st.arranque.v += aFwd * dt;
+        if (st.arranque.t >= 1.2) { if (Math.abs(st.arranque.v) > 0.25) fijarSentido(st.arranque.v > 0 ? 1 : -1); st.arranque = null; }
+      }
+      // Pista 2: en curva (más de 8°/s durante 1 s), signo de la aceleración lateral por el del giro.
+      if (Math.abs(st.vel) > 8) {
+        const c = st.curva || (st.curva = { t: 0, s: 0 });
+        c.t += dt; c.s += aLat * (st.vel > 0 ? 1 : -1) * dt;
+        if (c.t >= 1) { const m = c.s / c.t; if (Math.abs(m) > 0.15) fijarSentido(m > 0 ? 1 : -1); st.curva = null; }
+      } else st.curva = null;
+    }
+  }
+  function fijarSentido(s) { st.sentido = s; }
+
+  // ¿Entra marcha atrás? En línea siempre. En batería/espiga, lo que detecte el acelerómetro
+  // durante la maniobra y, mientras no se sepa, el ajuste "Entro marcha atrás".
+  function entraAtras() {
+    if (cfg.linea) return true;
+    if (st.fase === 'guiando' && st.sentido) return st.sentido < 0;
+    return cfg.atras;
   }
 
   async function pedirPermiso(Clase) {
@@ -564,6 +633,7 @@
 
     st.giro = 0; st.giroAnterior = 0; st.tGiro = null; st.lado = 0; st.vel = 0; empezarEtapa(1);
     st.tManip = 0; st.tEstable = 0; st.mensajeMovil = false;
+    st.sentido = 0; st.arranque = null; st.curva = null; st.tReposo = 0;
     st.fase = 'guiando'; st.zona = 'lejos';
     tono(660, 90); tono(990, 120, 0.11);
     decir('Vale, gira');
@@ -784,11 +854,11 @@
 
     // Dibujo: tu coche fijo en el centro mirando hacia arriba y la escena moviéndose alrededor.
     const guiando = st.fase === 'guiando';
-    const clave = [cfg.linea, cfg.atras, cfg.objetivo].join();
+    const clave = [cfg.linea, entraAtras(), cfg.objetivo].join();
     if (st.escenaClave !== clave) { dibujarEscena(); st.escenaClave = clave; }
     // Plaza a la derecha o a la izquierda: se deduce del sentido del giro. Entrando de frente
     // giras hacia la plaza; marcha atrás (y en línea) el morro gira hacia el lado contrario.
-    const plazaDerecha = st.lado === 0 ? true : (cfg.linea || cfg.atras ? st.lado === 1 : st.lado === -1);
+    const plazaDerecha = st.lado === 0 ? true : (cfg.linea || entraAtras() ? st.lado === 1 : st.lado === -1);
     poner(escena, 'transform', plazaDerecha ? 'scale(1 1)' : 'scale(-1 1)');
     // Suavizado: quita el temblor del sensor y evita saltos al decidir el lado.
     const avanceObj = guiando ? avance : 0;
@@ -800,7 +870,21 @@
     st.tPintado = ahora;
     const entrando = guiando && !cfg.linea && st.zona === 'ok';
     st.entrada = Math.max(0, Math.min(1, (st.entrada || 0) + dtFrame * (entrando ? 0.45 : -1.5)));
-    const q = postura(geometria(), st.avanceDibujo, guiando ? st.etapa : 1, st.entrada);
+    // Tutorial animado: manda sobre la medida mientras dura.
+    let q = null, tutoTexto = '', refs = '0';
+    if (st.tuto) {
+      const p = pasoTutorial(ahora);
+      if (!p) st.tuto = null;
+      else {
+        q = postura(geometria(), p.avance, p.etapa, p.entrada);
+        if (p.aprox) q.p = suma(q.p, detras(q.h), p.aprox);
+        tutoTexto = p.texto; refs = p.refs ? (cfg.linea ? 'trasera' : 'hombro') : '0';
+      }
+    }
+    if (!q) q = postura(geometria(), st.avanceDibujo, guiando ? st.etapa : 1, st.entrada);
+    poner(app, 'data-tuto', st.tuto ? '1' : '0');
+    poner(app, 'data-refs', refs);
+    poner($('tutoTexto'), 'text', tutoTexto);
     // Centro del coche en el mundo; la vista lo lleva al origen con el rumbo hacia arriba.
     let c = suma(q.p, detras(q.h), -EJE), h = q.h;
     if (!plazaDerecha) { c = [-c[0], c[1]]; h = -h; }
@@ -853,6 +937,7 @@
     const g = Math.round(Math.abs(giro));
     poner(girado, 'text', st.fase === 'guiando' && g > 0 ? `${g}° a la ${giro > 0 ? 'izquierda' : 'derecha'}` : '0°');
     poner(velocidad, 'text', Math.abs(st.vel).toFixed(0) + '°/s');
+    poner($('sentido'), 'text', !guiando || st.fuente === 'sim' ? '—' : st.sentido > 0 ? 'adelante' : st.sentido < 0 ? 'marcha atrás' : 'aún no lo sé');
 
     const m = st.mensaje;
     const guiaTexto = st.fase === 'guiando' && cfg.linea ? GUIAS[st.etapa === 1 ? 'linea1' : 'linea2'] : GUIAS[st.fase];
@@ -891,20 +976,20 @@
     // Batería/espiga: partiendo por el carril (rumbo -90) con la plaza a la derecha. De frente
     // el rumbo gira en sentido horario; marcha atrás, con el volante a la derecha, el morro
     // gira en sentido antihorario. En ambos casos el pivote queda a la derecha del coche.
-    const obj = cfg.objetivo, s = cfg.atras ? 1 : -1;
-    const hf = cfg.atras ? -90 - obj : -90 + obj;
+    const obj = cfg.objetivo, s = entraAtras() ? 1 : -1;
+    const hf = entraAtras() ? -90 - obj : -90 + obj;
     const rearF = suma([0, 0], detras(hf), EJE);
     // El arco termina en la boca de la plaza (así el coche no barre a los vecinos) y el
     // último tramo se hace recto. Hacia el carril: por detrás si entras de frente, por
     // delante si entras marcha atrás.
-    const haciaCarril = suma([0, 0], detras(hf), cfg.atras ? -1 : 1);
+    const haciaCarril = suma([0, 0], detras(hf), entraAtras() ? -1 : 1);
     // El vecino del lado del pivote no debe quedar dentro del barrido del coche: se alarga
     // el tramo recto hasta que todas sus esquinas queden fuera del radio interior del giro.
     // Hace falta sobre todo en espiga, donde el pivote cae muy cerca del vecino.
     const vecino = suma([0, 0], derecha(hf), 140);
     const esquinas = [];
     for (const a of [-1, 1]) for (const b of [-1, 1]) esquinas.push(suma(suma(vecino, derecha(hf), 46 * a), detras(hf), 104 * b));
-    let recta = cfg.atras ? RECTA_ATRAS : RECTA_FRENTE, rearE, C;
+    let recta = entraAtras() ? RECTA_ATRAS : RECTA_FRENTE, rearE, C;
     for (let i = 0; i < 40; i++, recta += 10) {
       rearE = suma(rearF, haciaCarril, recta);
       C = suma(rearE, derecha(hf), R_GIRO);
@@ -948,9 +1033,9 @@
       add('line', { class: 'bordillo', x1: -3000, y1: -60, x2: 3000, y2: -60 });
       cocheEn('vecino', -268, 0, -90); cocheEn('vecino', 268, 0, -90);
     } else {
-      const hb = cfg.atras ? 90 - cfg.objetivo : cfg.objetivo - 90;   // inclinación de las plazas
+      const hb = entraAtras() ? 90 - cfg.objetivo : cfg.objetivo - 90;   // inclinación de las plazas
       for (const x of [-350, -210, -70, 70, 210, 350]) add('line', { class: 'linea-plaza', x1: x, y1: -125, x2: x, y2: 125, transform: `rotate(${hb})` });
-      const hv = hb + (cfg.atras ? 180 : 0);
+      const hv = hb + (entraAtras() ? 180 : 0);
       for (const x of [-280, -140, 140, 280]) cocheEn('vecino', ...rot([x, 0], hb), hv);
     }
 
@@ -971,6 +1056,24 @@
       d += (i ? ' L' : 'M') + c[0].toFixed(1) + ',' + c[1].toFixed(1);
     }
     add('path', { class: 'trayecto', d });
+
+    // Referencias del tutorial: dónde parar (silueta en el punto de partida) y la línea que
+    // debe quedar a la altura del hombro (batería) o de la trasera (en línea).
+    const q0 = postura(g, 0, 1, 0), c0 = suma(q0.p, detras(q0.h), -EJE);
+    const refs = document.createElementNS(NS, 'g'); refs.setAttribute('class', 'refs'); fijo.appendChild(refs);
+    const addRef = (tag, attrs) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); refs.appendChild(e); return e; };
+    const ghost0 = addRef('use', { class: 'fantasma-inicio', transform: `translate(${c0[0]} ${c0[1]}) rotate(${q0.h})` });
+    ghost0.setAttributeNS('http://www.w3.org/1999/xlink', 'href', '#formaCoche'); ghost0.setAttribute('href', '#formaCoche');
+    const dcha = derecha(q0.h);
+    if (cfg.linea) {
+      const tras = suma(c0, detras(q0.h), 104);                    // parachoques trasero
+      const a = suma(tras, dcha, -30), b = suma(tras, dcha, 210);   // hacia la acera, hasta el coche de delante
+      addRef('line', { class: 'linea-ref', x1: a[0], y1: a[1], x2: b[0], y2: b[1] });
+    } else {
+      const hombro = suma(suma(c0, dcha, -30), detras(q0.h), -5);   // conductor a la izquierda
+      const a = suma(hombro, dcha, -50), b = suma(hombro, dcha, 420);
+      addRef('line', { class: 'linea-ref', x1: a[0], y1: a[1], x2: b[0], y2: b[1] });
+    }
   }
 
   /* ───────────── Cámara: coches cercanos (orientativo) ─────────────
@@ -1126,6 +1229,47 @@
     $('optSim').checked = cfg.sim;
   }
   $('abrirAjustes').addEventListener('click', () => { sincronizarAjustes(); dlg.showModal(); });
+
+  /* ───────────── Tutorial animado: "Cómo se hace" ─────────────
+     Una maniobra de ejemplo dibujada en la propia escena, paso a paso, con un rótulo corto:
+     llegar, parar en el punto de referencia, girar, enderezar y entrar. Se cierra tocando. */
+  function pasosTutorial() {
+    const obj = cfg.objetivo, alejar = u => ({ aprox: 320 * (1 - u) });
+    if (cfg.linea) return [
+      { d: 2.5, texto: 'Acércate al hueco despacio', f: alejar },
+      { d: 3.5, texto: 'Para aquí: trasera con trasera, a medio metro. Pulsa «Estoy recto»', f: () => ({}), refs: true },
+      { d: 4, texto: 'Volante a tope hacia la acera. Marcha atrás despacio', f: u => ({ avance: 45 * u }) },
+      { d: 2, texto: '«Volante al otro lado»: gira a tope hacia el otro lado', f: () => ({ avance: 45 }) },
+      { d: 4, texto: 'Sigue marcha atrás', f: u => ({ avance: 45 * (1 - u), etapa: 2 }) },
+      { d: 2.5, texto: '«Recto»: volante derecho y avanza un poco para centrarte', f: () => ({ etapa: 2 }) },
+      { d: 2, texto: 'Ya está. Toca para cerrar', f: () => ({ etapa: 2 }) },
+    ];
+    const atras = entraAtras();
+    return [
+      { d: 2.5, texto: atras ? 'Pasa la plaza despacio, a un metro de los coches' : 'Ve por el pasillo, lejos de las plazas', f: alejar },
+      { d: 3.5, texto: atras ? 'Para aquí, con la plaza ya pasada. Pulsa «Estoy recto»' : 'Para aquí: tu hombro a la altura de esta línea. Pulsa «Estoy recto»', f: () => ({}), refs: true },
+      { d: 4, texto: atras ? 'Volante a tope hacia la plaza. Marcha atrás despacio' : 'Volante a tope hacia la plaza. Avanza despacio', f: u => ({ avance: (obj - 12) * u }) },
+      { d: 1.5, texto: '«Endereza»: ve poniendo el volante derecho', f: u => ({ avance: obj - 12 + 12 * u }) },
+      { d: 2.5, texto: '«Recto»: entra derecho hasta el fondo', f: u => ({ avance: obj, entrada: u }) },
+      { d: 2, texto: 'Ya está. Toca para cerrar', f: () => ({ avance: obj, entrada: 1 }) },
+    ];
+  }
+  function empezarTutorial() { st.tuto = { pasos: pasosTutorial(), t0: performance.now() }; }
+  function pasoTutorial(ahora) {
+    const t = (ahora - st.tuto.t0) / 1000;
+    let acc = 0;
+    for (const p of st.tuto.pasos) {
+      if (t < acc + p.d) {
+        const u = (t - acc) / p.d, suave = u * u * (3 - 2 * u);
+        return Object.assign({ avance: 0, etapa: 1, entrada: 0, aprox: 0, texto: p.texto, refs: !!p.refs }, p.f(suave));
+      }
+      acc += p.d;
+    }
+    return null;
+  }
+  $('abrirComo').addEventListener('click', () => { iniciarAudio(); empezarTutorial(); });
+  $('escenaSvg').addEventListener('click', () => { st.tuto = null; });
+  $('tutoTexto').addEventListener('click', () => { st.tuto = null; });
   $('olvidar').addEventListener('click', () => {
     cfg.aprendido = 0; guardarAjustes(); $('aprendidoTexto').textContent = textoAprendido();
   });

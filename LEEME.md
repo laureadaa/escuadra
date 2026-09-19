@@ -83,6 +83,29 @@ la escena es una calle con acera, dos coches aparcados y el hueco entre ellos.
 
 Las plazas en espiga (60° o 45°), el margen, la voz y la entrada marcha atrás están en **Ajustes**.
 
+## Referencias para aparcar (botón "Cómo se hace")
+
+Contadas con la plaza a la derecha; a la izquierda es igual pero al revés.
+
+- **Batería de frente**: ve por el pasillo lo más lejos posible de las plazas. Para cuando tu hombro
+  esté a la altura de la primera línea de la plaza. Pulsa "Estoy recto", volante a tope hacia la
+  plaza y avanza despacio. "Endereza" = ve poniendo el volante derecho; "recto" = entra derecho.
+- **Batería marcha atrás**: pasa la plaza a un metro de los coches. Para cuando la plaza quede detrás
+  de tu asiento (hombro a la altura de la línea más lejana). "Estoy recto", volante a tope hacia la
+  plaza y marcha atrás despacio.
+- **Espiga**: igual que de frente, con menos giro.
+- **En línea**: al lado del coche de delante del hueco, a medio metro, trasera con trasera. "Estoy
+  recto", volante a tope hacia la acera, marcha atrás. Cuando diga "volante al otro lado", a tope
+  al otro lado y sigue atrás. "Recto" = para, volante derecho y avanza un poco para centrarte.
+
+## ¿Avanza o retrocede?
+
+El giroscopio no lo sabe. La app lo intenta deducir con el acelerómetro, de forma orientativa: al
+arrancar desde parado mira hacia dónde empuja el coche, y en curva hacia qué lado apunta la
+aceleración respecto al sentido del giro. Supone que el móvil va de pie en el soporte con la
+pantalla hacia el conductor (o tumbado con la parte de arriba hacia delante). Mientras no lo
+detecta, usa el ajuste "Entro marcha atrás". Se muestra bajo el número grande ("Sentido").
+
 ## Ayudas para aparcar
 
 - **Voz**: "Endereza", "Recto", "Te has pasado". Para mirar atrás en vez de a la pantalla. Activada por
