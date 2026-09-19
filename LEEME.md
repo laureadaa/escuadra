@@ -152,9 +152,19 @@ detecta, usa el ajuste "Entro marcha atrás". Se muestra bajo el número grande 
 - Precisión esperable en una maniobra de menos de un minuto: en torno a ±1°. En rampas pronunciadas empeora.
 - Sin giroscopio, la orientación sale de la brújula, bastante menos fiable dentro de un coche.
 
+## Pruebas
+
+`node pruebas.js` pasa una batería de más de 70 pruebas sin abrir un navegador: comprobaciones
+estáticas (sintaxis, ids, archivos, modelo), sensores simulados (giro, inclinación, manipulación,
+sentido, iPhone y Android), todos los modos y lados, ajustes, geometría (sin choques con los
+vecinos, trayectoria continua), tutorial, cámara y una sección de casos de la vida real (rampa,
+baches, brújula, ruido, paradas a mitad, dos maniobras seguidas, doble toque, app en segundo
+plano, deriva...).
+
 ## Archivos
 
 - `index.html`: toda la app (interfaz, estilos y lógica).
 - `manifest.webmanifest`, `icon.svg`, `icon-180.png`, `sw.js`: la hacen instalable (Android e iPhone) y
   utilizable sin conexión.
 - `modelo/`: TensorFlow.js y el modelo COCO-SSD para la detección de coches con la cámara.
+- `pruebas.js`: la batería de pruebas (node).

@@ -52,19 +52,22 @@
     -webkit-user-select: none;
   }
 
+  /* El dibujo ocupa casi toda la pantalla. El número y la frase van superpuestos sobre él
+     (misma celda de la cuadrícula) y abajo queda una franja fina con el botón. */
   .app {
     height: 100dvh;
     display: grid;
-    grid-template-rows: auto minmax(0, 1fr) auto auto;
+    grid-template-rows: auto minmax(0, 1fr) auto;
     grid-template-columns: minmax(0, 1fr);
-    gap: .75rem;
-    padding: max(.75rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
-             max(.75rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+    gap: .4rem;
+    padding: max(.4rem, env(safe-area-inset-top)) max(.6rem, env(safe-area-inset-right))
+             max(.4rem, env(safe-area-inset-bottom)) max(.6rem, env(safe-area-inset-left));
   }
 
   /* Cabecera */
-  .cabecera { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
-  .marca { font-weight: 800; font-size: 1.125rem; letter-spacing: .01em; }
+  .cabecera { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+  .botones-cabecera { flex: none; }
+  .marca { font-weight: 800; font-size: 1rem; letter-spacing: .01em; flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .sensor { color: var(--pintura-gastada); font-size: .875rem; margin-left: .625rem; font-weight: 400; }
 
   button { font: inherit; color: inherit; cursor: pointer; border: 0; background: none; }
@@ -73,17 +76,17 @@
   }
 
   .btn-ajustes {
-    padding: .5rem .875rem; border-radius: 999px;
-    background: var(--asfalto-claro); font-weight: 600; font-size: .9375rem;
+    padding: .3rem .6rem; border-radius: 999px;
+    background: var(--asfalto-claro); font-weight: 600; font-size: .8rem;
   }
   .botones-cabecera { display: flex; gap: .5rem; flex-wrap: wrap; justify-content: flex-end; }
   .maniobra { display: flex; gap: .5rem; justify-content: center; }
-  .chip { padding: .5rem 1rem; border-radius: 999px; background: var(--asfalto-hondo); font-weight: 600; font-size: .9375rem; }
+  .chip { padding: .35rem .8rem; border-radius: 999px; background: var(--asfalto-hondo); font-weight: 600; font-size: .85rem; }
   .chip[aria-pressed="true"] { background: var(--rosa); color: #fff; }
   [data-linea="1"] .maniobra { display: none; }
 
   /* Tutorial animado ("Cómo se hace"): rótulo sobre el dibujo, referencias y punto del hombro */
-  .esfera { position: relative; }
+  .esfera { position: relative; grid-row: 2; grid-column: 1; }
   .tuto-texto {
     position: absolute; left: .75rem; right: .75rem; top: .75rem; display: none;
     padding: .75rem 1rem; border-radius: 1rem; background: rgba(255, 255, 255, .92);
@@ -126,7 +129,8 @@
   .fantasma { opacity: .35; }
   [data-zona="sin"] .fantasma { opacity: .22; }
   .trayecto { fill: none; stroke: var(--pintura-gastada); stroke-width: 3; stroke-dasharray: 6 10; opacity: .7; }
-  .nota-escena { text-align: center; font-size: .75rem; color: var(--pintura-gastada); text-wrap: balance; }
+  .nota-escena { position: absolute; left: 0; right: 0; bottom: .2rem; text-align: center; font-size: .65rem; color: var(--pintura-gastada); opacity: .8; pointer-events: none; }
+  [data-tuto="1"] .lectura { display: none; }
   .carroceria { fill: var(--estado); }
   .cristal { fill: #4A2238; opacity: .6; }
   .faro { fill: var(--faro, #FFF7C2); }
@@ -134,38 +138,43 @@
   .retrovisor { fill: var(--estado); }
   [data-zona="sin"] .coche { opacity: .55; }
 
-  /* Lectura */
-  .lectura { text-align: center; }
-  .frase { font-size: 1.25rem; font-weight: 600; color: var(--pintura-gastada); min-height: 1.35em; }
+  /* Lectura: tarjeta superpuesta en la esquina superior izquierda del dibujo */
+  .lectura {
+    grid-row: 2; grid-column: 1; align-self: start; justify-self: start; z-index: 2;
+    pointer-events: none; margin: .5rem; padding: .4rem .8rem .5rem; max-width: 70%;
+    background: rgba(255, 240, 246, .88); border-radius: 1rem; text-align: left;
+    box-shadow: 0 2px 10px rgba(90, 42, 68, .12);
+  }
+  .frase { font-size: 1rem; font-weight: 600; color: var(--pintura-gastada); min-height: 1.3em; text-wrap: balance; }
   .cifra {
     font-weight: 800;
-    font-size: clamp(4.5rem, min(27vw, 17vh), 11rem);
-    line-height: .95;
+    font-size: clamp(2.75rem, 13vw, 5rem);
+    line-height: 1;
     letter-spacing: -.02em;
     font-variant-numeric: tabular-nums;
     color: var(--estado);
   }
   [data-zona="sin"] .cifra { color: var(--pintura-gastada); }
   .datos {
-    display: flex; justify-content: center; gap: 1.5rem; flex-wrap: wrap;
-    margin-top: .375rem; font-size: .9375rem; color: var(--pintura-gastada);
+    display: none; justify-content: flex-start; gap: .75rem; flex-wrap: wrap;   /* solo en apaisado */
+    margin-top: .2rem; font-size: .7rem; color: var(--pintura-gastada);
     font-variant-numeric: tabular-nums;
   }
   .datos b { color: var(--pintura); font-weight: 600; }
 
   /* Acciones */
-  .acciones { display: grid; gap: .625rem; }
-  .guia { text-align: center; font-size: 1rem; min-height: 2.7em; display: grid; place-items: center; text-wrap: balance; }
+  .acciones { display: grid; gap: .4rem; }
+  .guia { text-align: center; font-size: .9rem; min-height: 0; display: grid; place-items: center; text-wrap: balance; }
   .guia[data-tono="error"] { color: var(--ambar); }
   .btn-principal {
-    width: 100%; min-height: 4.25rem; border-radius: 1.125rem;
+    width: 100%; min-height: 3.4rem; border-radius: 1rem;
     background: var(--rosa); color: #fff;
-    font-weight: 800; font-size: 1.375rem;
+    font-weight: 800; font-size: 1.25rem;
     transition: transform .08s ease;
   }
   .btn-principal:active { transform: scale(.985); }
   .btn-principal[disabled] { background: var(--asfalto-claro); color: var(--pintura-gastada); cursor: default; }
-  .aviso { text-align: center; font-size: .8125rem; color: var(--pintura-gastada); text-wrap: balance; }
+  .aviso { text-align: center; font-size: .7rem; color: var(--pintura-gastada); text-wrap: balance; }
 
   /* Simulación */
   .simulador {
@@ -182,18 +191,25 @@
   /* Apaisado: móvil tumbado o pantalla del coche */
   @media (orientation: landscape) {
     .app {
-      grid-template-columns: minmax(0, 1fr) minmax(17rem, 44%);
+      grid-template-columns: minmax(0, 1fr) minmax(14rem, 32%);
       grid-template-rows: auto minmax(0, 1fr) auto;
-      column-gap: 1.5rem;
+      column-gap: .75rem;
     }
     .cabecera { grid-column: 1 / -1; }
     .esfera { grid-row: 2 / 4; grid-column: 1; }
-    .lectura { grid-column: 2; align-self: center; }
-    .acciones { grid-column: 2; }
-    .cifra { font-size: clamp(3.5rem, min(13vw, 30vh), 10rem); }
-    .btn-principal { min-height: 3.5rem; }
+    .lectura {
+      grid-row: 2; grid-column: 2; align-self: center; justify-self: stretch; max-width: none;
+      margin: 0; background: none; box-shadow: none; text-align: center; pointer-events: auto;
+    }
+    .lectura { align-self: start; }
+    .datos { display: flex; justify-content: center; }
+    .cifra { font-size: clamp(3rem, min(9vw, 28vh), 8rem); }
+    .acciones { grid-row: 3; grid-column: 2; max-height: 58vh; overflow-y: auto; }
   }
   @media (orientation: landscape) and (max-height: 430px) {
+    .cifra { font-size: 2.6rem; }
+    .aviso { display: none; }
+    .simulador { padding: .3rem .5rem; }
     .aviso, .frase { font-size: .8125rem; }
     .guia { min-height: 0; font-size: .875rem; }
     .datos { gap: .875rem; font-size: .8125rem; }
@@ -239,7 +255,7 @@
 <main class="app" id="app" data-zona="sin">
 
   <header class="cabecera">
-    <div class="marca">Escuadra<span class="sensor" id="sensor"></span><span class="sensor" id="version">v9</span></div>
+    <div class="marca">Escuadra<span class="sensor" id="sensor"></span><span class="sensor" id="version">v10</span></div>
     <div class="botones-cabecera">
       <button class="btn-ajustes" id="abrirComo" type="button">Cómo se hace</button>
       <button class="btn-ajustes" id="abrirAjustes" type="button">Ajustes</button>
@@ -380,7 +396,7 @@
     </fieldset>
 
     <button class="btn-cerrar" value="cerrar">Guardar y cerrar</button>
-    <p class="ayuda">Escuadra versión 9. Si en la cabecera pone otro número, recarga la app con internet.</p>
+    <p class="ayuda">Escuadra versión 10. Si en la cabecera pone otro número, recarga la app con internet.</p>
   </form>
 </dialog>
 
