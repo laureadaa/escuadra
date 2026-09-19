@@ -1,0 +1,16 @@
+{
+  "name": "Escuadra: ángulo para aparcar en batería",
+  "short_name": "Escuadra",
+  "description": "Mide con el giroscopio cuántos grados ha girado el coche y avisa cuando está recto en la plaza.",
+  "lang": "es",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#FFE9F0",
+  "theme_color": "#FFE9F0",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" },
+    { "src": "icon-180.png", "sizes": "180x180", "type": "image/png" }
+  ]
+}

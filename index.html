@@ -1,0 +1,1155 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Escuadra: ángulo para aparcar en batería</title>
+<meta name="description" content="Mide con el giroscopio cuántos grados ha girado el coche y avisa cuando está recto en la plaza.">
+<meta name="theme-color" content="#FFE9F0">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<!-- iPhone: instalable desde Safari (Compartir > Añadir a pantalla de inicio), sin ocupar toda la pantalla -->
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Escuadra">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+<style>
+  /* Paleta rosa pastel: fondos claros y suaves, texto ciruela oscuro, rosa para el coche y
+     los botones, verde para "recto" y ámbar para "te has pasado". */
+  :root {
+    --asfalto: #FFE9F0;          /* fondo general */
+    --asfalto-hondo: #F9D5E2;    /* carril y superficies hundidas */
+    --asfalto-claro: #F5BFD3;    /* botones secundarios, acera */
+    --pintura: #5A2A44;          /* texto principal y líneas de la plaza */
+    --pintura-gastada: #9A6F86;  /* texto secundario */
+    --rosa: #F06CA0;
+    --ambar: #D98C00;
+    --verde: #2FB673;
+    --estado: var(--rosa);
+
+    /* Solo fuentes del sistema: nada que descargar, para que abra igual sin cobertura. */
+    --fuente: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  [data-zona="ok"]     { --estado: var(--verde); }
+  [data-zona="pasado"] { --estado: var(--ambar); }
+  [data-zona="sin"]    { --estado: #D9A3BB; }
+
+  * { box-sizing: border-box; margin: 0; }
+
+  html, body { height: 100%; }
+  body {
+    color-scheme: light;
+    background: var(--asfalto);
+    color: var(--pintura);
+    font-family: var(--fuente);
+    font-size: 1rem;
+    line-height: 1.35;
+    overflow: hidden;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .app {
+    height: 100dvh;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto auto;
+    grid-template-columns: minmax(0, 1fr);
+    gap: .75rem;
+    padding: max(.75rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
+             max(.75rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+  }
+
+  /* Cabecera */
+  .cabecera { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+  .marca { font-weight: 800; font-size: 1.125rem; letter-spacing: .01em; }
+  .sensor { color: var(--pintura-gastada); font-size: .875rem; margin-left: .625rem; font-weight: 400; }
+
+  button { font: inherit; color: inherit; cursor: pointer; border: 0; background: none; }
+  button:focus-visible, input:focus-visible, label:has(input:focus-visible) {
+    outline: 3px solid var(--pintura); outline-offset: 3px;
+  }
+
+  .btn-ajustes {
+    padding: .5rem .875rem; border-radius: 999px;
+    background: var(--asfalto-claro); font-weight: 600; font-size: .9375rem;
+  }
+
+  /* Esfera (y cámara encima cuando está activada) */
+  .esfera { min-height: 0; display: flex; flex-direction: column; gap: .5rem; }
+  .esfera svg { flex: 1 1 0; min-height: 0; width: 100%; display: block; }
+  .camara {
+    position: relative; flex: 1.3 1 0; min-height: 0; border-radius: 1rem; overflow: hidden;
+    background: var(--asfalto-hondo);
+  }
+  .camara[hidden] { display: none; }
+  .camara video, .camara canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .camara-estado {
+    position: absolute; left: 0; right: 0; top: 0; padding: .375rem .5rem; text-align: center;
+    font-weight: 800; font-size: 1.125rem; background: rgba(255, 240, 246, .82); min-height: 2.1em;
+  }
+  .camara-estado[data-nivel="cerca"] { color: var(--ambar); }
+  .camara-estado[data-nivel="muy"] { color: #FF6B6B; }
+  .camara-aviso {
+    position: absolute; left: 0; right: 0; bottom: 0; padding: .25rem .5rem; text-align: center;
+    font-size: .75rem; color: var(--pintura-gastada); background: rgba(255, 240, 246, .82);
+  }
+  .carril { fill: var(--asfalto-hondo); }
+  .acera { fill: var(--asfalto-claro); }
+  .bordillo { stroke: var(--pintura-gastada); stroke-width: 4; }
+  .linea-plaza { stroke: var(--pintura); stroke-width: 8; stroke-linecap: butt; }
+  .vecino { --estado: #D9B4C4; --faro: #FFFFFF; --piloto: #C98A9C; }
+  .fantasma { opacity: .35; }
+  [data-zona="sin"] .fantasma { opacity: .22; }
+  .trayecto { fill: none; stroke: var(--pintura-gastada); stroke-width: 3; stroke-dasharray: 6 10; opacity: .7; }
+  .nota-escena { text-align: center; font-size: .75rem; color: var(--pintura-gastada); text-wrap: balance; }
+  .carroceria { fill: var(--estado); }
+  .cristal { fill: #4A2238; opacity: .6; }
+  .faro { fill: var(--faro, #FFF7C2); }
+  .piloto { fill: var(--piloto, #E5484D); }
+  .retrovisor { fill: var(--estado); }
+  [data-zona="sin"] .coche { opacity: .55; }
+
+  /* Lectura */
+  .lectura { text-align: center; }
+  .frase { font-size: 1.25rem; font-weight: 600; color: var(--pintura-gastada); min-height: 1.35em; }
+  .cifra {
+    font-weight: 800;
+    font-size: clamp(4.5rem, min(27vw, 17vh), 11rem);
+    line-height: .95;
+    letter-spacing: -.02em;
+    font-variant-numeric: tabular-nums;
+    color: var(--estado);
+  }
+  [data-zona="sin"] .cifra { color: var(--pintura-gastada); }
+  .datos {
+    display: flex; justify-content: center; gap: 1.5rem; flex-wrap: wrap;
+    margin-top: .375rem; font-size: .9375rem; color: var(--pintura-gastada);
+    font-variant-numeric: tabular-nums;
+  }
+  .datos b { color: var(--pintura); font-weight: 600; }
+
+  /* Acciones */
+  .acciones { display: grid; gap: .625rem; }
+  .guia { text-align: center; font-size: 1rem; min-height: 2.7em; display: grid; place-items: center; text-wrap: balance; }
+  .guia[data-tono="error"] { color: var(--ambar); }
+  .btn-principal {
+    width: 100%; min-height: 4.25rem; border-radius: 1.125rem;
+    background: var(--rosa); color: #fff;
+    font-weight: 800; font-size: 1.375rem;
+    transition: transform .08s ease;
+  }
+  .btn-principal:active { transform: scale(.985); }
+  .btn-principal[disabled] { background: var(--asfalto-claro); color: var(--pintura-gastada); cursor: default; }
+  .aviso { text-align: center; font-size: .8125rem; color: var(--pintura-gastada); text-wrap: balance; }
+
+  /* Simulación */
+  .simulador {
+    display: none; gap: .625rem; align-items: center;
+    padding: .625rem .875rem; border-radius: .875rem;
+    border: 2px dashed var(--asfalto-claro);
+    font-size: .9375rem;
+  }
+  .simulador.visible { display: flex; flex-wrap: wrap; }
+  .simulador label { font-weight: 600; }
+  .simulador input[type=range] { flex: 1 1 9rem; accent-color: var(--rosa); min-width: 0; }
+  .simulador button { padding: .5rem .75rem; border-radius: .625rem; background: var(--asfalto-claro); font-weight: 600; }
+
+  /* Apaisado: móvil tumbado o pantalla del coche */
+  @media (orientation: landscape) {
+    .app {
+      grid-template-columns: minmax(0, 1fr) minmax(17rem, 44%);
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      column-gap: 1.5rem;
+    }
+    .cabecera { grid-column: 1 / -1; }
+    .esfera { grid-row: 2 / 4; grid-column: 1; }
+    .lectura { grid-column: 2; align-self: center; }
+    .acciones { grid-column: 2; }
+    .cifra { font-size: clamp(3.5rem, min(13vw, 30vh), 10rem); }
+    .btn-principal { min-height: 3.5rem; }
+  }
+  @media (orientation: landscape) and (max-height: 430px) {
+    .aviso, .frase { font-size: .8125rem; }
+    .guia { min-height: 0; font-size: .875rem; }
+    .datos { gap: .875rem; font-size: .8125rem; }
+  }
+
+  /* Ajustes */
+  dialog {
+    border: 0; padding: 0; color: var(--pintura); background: var(--asfalto);
+    border-radius: 1.25rem; width: min(30rem, calc(100vw - 1.5rem));
+    max-height: calc(100dvh - 1.5rem); margin: auto;
+    user-select: text; -webkit-user-select: text;
+  }
+  dialog::backdrop { background: rgba(90, 42, 68, .45); }
+  .hoja { padding: 1.25rem; display: grid; gap: 1.25rem; overflow-y: auto; max-height: calc(100dvh - 1.5rem); }
+  .hoja h2 { font-size: 1.375rem; font-weight: 800; }
+  fieldset { border: 0; padding: 0; display: grid; gap: .5rem; }
+  legend { font-weight: 600; margin-bottom: .5rem; padding: 0; }
+  .ayuda { font-size: .875rem; color: var(--pintura-gastada); }
+  .opciones { display: flex; gap: .5rem; flex-wrap: wrap; }
+  .opciones label {
+    flex: 1 1 5.5rem; text-align: center; padding: .75rem .5rem; border-radius: .75rem;
+    background: var(--asfalto-hondo); border: 2px solid transparent; cursor: pointer; font-weight: 600;
+  }
+  .opciones label small { display: block; font-weight: 400; color: var(--pintura-gastada); font-size: .8125rem; }
+  .opciones input { position: absolute; opacity: 0; pointer-events: none; }
+  .opciones label:has(input:checked) { border-color: var(--rosa); background: #F7B8D0; }
+  .interruptor {
+    display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+    padding: .75rem .875rem; border-radius: .75rem; background: var(--asfalto-hondo); cursor: pointer;
+  }
+  .interruptor span small { display: block; color: var(--pintura-gastada); font-size: .8125rem; }
+  .interruptor input { width: 1.5rem; height: 1.5rem; accent-color: var(--rosa); flex: none; }
+  .btn-cerrar {
+    min-height: 3.25rem; border-radius: .875rem; background: var(--rosa); color: #fff;
+    font-weight: 800; font-size: 1.125rem;
+  }
+
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+
+<body>
+<main class="app" id="app" data-zona="sin">
+
+  <header class="cabecera">
+    <div class="marca">Escuadra<span class="sensor" id="sensor"></span></div>
+    <button class="btn-ajustes" id="abrirAjustes" type="button">Ajustes</button>
+  </header>
+
+  <section class="esfera">
+    <div class="camara" id="camara" hidden>
+      <video id="video" playsinline muted autoplay></video>
+      <canvas id="lienzo"></canvas>
+      <p class="camara-estado" id="camaraEstado" aria-live="polite"></p>
+      <p class="camara-aviso">Orientativo: reconoce coches delante, no mide distancias. Mira siempre tú.</p>
+    </div>
+    <!-- Vista desde arriba centrada en tu coche, como una cámara 360: el coche está siempre
+         fijo mirando hacia arriba y la escena (plaza, coches vecinos, trayectoria) se mueve a
+         su alrededor. La posición sale de un modelo de giro de coche (el eje trasero describe
+         un arco) a partir del ángulo medido. Se calcula con la plaza a la derecha; si está a la
+         izquierda, la escena se dibuja en espejo. -->
+    <svg id="escenaSvg" viewBox="-300 -400 600 700" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+      <defs>
+        <symbol id="formaCoche" overflow="visible">
+          <rect class="retrovisor" x="-54" y="-42" width="12" height="16" rx="4"/>
+          <rect class="retrovisor" x="42"  y="-42" width="12" height="16" rx="4"/>
+          <path class="carroceria" d="M-30,-100 Q0,-108 30,-100 Q46,-94 46,-70 V76 Q46,98 28,100 Q0,104 -28,100 Q-46,98 -46,76 V-70 Q-46,-94 -30,-100 Z"/>
+          <path class="cristal" d="M-35,-46 Q0,-60 35,-46 L30,-16 Q0,-24 -30,-16 Z"/>
+          <path class="cristal" d="M-32,66 Q0,76 32,66 L29,42 Q0,48 -29,42 Z"/>
+          <ellipse class="faro" cx="-29" cy="-93" rx="9" ry="4" transform="rotate(-18 -29 -93)"/>
+          <ellipse class="faro" cx="29"  cy="-93" rx="9" ry="4" transform="rotate(18 29 -93)"/>
+          <rect class="piloto" x="-38" y="92" width="18" height="5" rx="2.5"/>
+          <rect class="piloto" x="20"  y="92" width="18" height="5" rx="2.5"/>
+        </symbol>
+      </defs>
+      <rect class="carril" x="-3000" y="-3000" width="6000" height="6000"/>
+      <g id="vista">
+        <g id="escena">
+          <g id="fijo"></g>
+        </g>
+      </g>
+      <use href="#formaCoche" class="coche" id="coche"/>
+    </svg>
+    <p class="nota-escena">Vista orientativa: solo el ángulo está medido. La posición y las distancias son un dibujo.</p>
+  </section>
+
+  <section class="lectura" aria-live="polite">
+    <p class="frase" id="frase">Sin referencia</p>
+    <p class="cifra" id="cifra">90°</p>
+    <div class="datos">
+      <span>Girado <b id="girado">0°</b></span>
+      <span>Velocidad de giro <b id="velocidad">0°/s</b></span>
+    </div>
+  </section>
+
+  <section class="acciones">
+    <div class="simulador" id="simulador">
+      <label for="simGiro">Giro simulado</label>
+      <input type="range" id="simGiro" min="-130" max="130" step="0.5" value="0">
+      <button type="button" id="simDemo">Ver maniobra de ejemplo</button>
+    </div>
+    <p class="guia" id="guia"></p>
+    <button class="btn-principal" id="principal" type="button">Activar sensores</button>
+    <p class="aviso">Mide el ángulo, no distancias. No ve bordillos ni personas: mira siempre tú.</p>
+  </section>
+</main>
+
+<dialog id="ajustes" aria-labelledby="tituloAjustes">
+  <form method="dialog" class="hoja">
+    <h2 id="tituloAjustes">Ajustes</h2>
+
+    <fieldset>
+      <legend>Tipo de plaza</legend>
+      <div class="opciones">
+        <label><input type="radio" name="plaza" value="90">90°<small>batería</small></label>
+        <label><input type="radio" name="plaza" value="60">60°<small>espiga</small></label>
+        <label><input type="radio" name="plaza" value="45">45°<small>espiga</small></label>
+        <label><input type="radio" name="plaza" value="linea">En línea<small>45° y contragiro</small></label>
+      </div>
+      <p class="ayuda">En línea: marca la referencia paralelo a los coches aparcados, con tu trasera a la altura de la trasera del coche de delante. Marcha atrás girando hacia la acera hasta que avise a los 45°, y luego contragira hasta que diga "recto".</p>
+    </fieldset>
+
+    <fieldset>
+      <legend>Margen para darlo por recto</legend>
+      <div class="opciones">
+        <label><input type="radio" name="tolerancia" value="1">±1°<small>exigente</small></label>
+        <label><input type="radio" name="tolerancia" value="2">±2°<small>normal</small></label>
+        <label><input type="radio" name="tolerancia" value="3">±3°<small>holgado</small></label>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Avisos</legend>
+      <label class="interruptor"><span>Pitidos<small>Más rápidos cuanto menos falta, como un sensor de aparcamiento</small></span><input type="checkbox" id="optSonido"></label>
+      <label class="interruptor"><span>Voz<small>Dice "endereza", "recto" o "te has pasado" para no mirar la pantalla</small></span><input type="checkbox" id="optVoz"></label>
+      <label class="interruptor"><span>Cantar los grados que faltan<small>"Faltan 30… 20… 10". Apagado por defecto</small></span><input type="checkbox" id="optCantar"></label>
+      <label class="interruptor"><span>Aviso de "endereza"<small>Avisa antes de llegar, según lo rápido que gires, para que el coche acabe recto</small></span><input type="checkbox" id="optAnticipar"></label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Aprender de mis maniobras</legend>
+      <label class="interruptor"><span>Ajustar el aviso solo<small>Mide cuánto te pasas tras el aviso y lo adelanta o retrasa la próxima vez. Se guarda en este móvil</small></span><input type="checkbox" id="optAprender"></label>
+      <div class="interruptor"><span id="aprendidoTexto"></span><button type="button" class="btn-ajustes" id="olvidar">Olvidar</button></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Dibujo</legend>
+      <label class="interruptor"><span>Entro marcha atrás<small>Dibuja la plaza detrás del coche en vez de delante</small></span><input type="checkbox" id="optAtras"></label>
+      <label class="interruptor"><span>Invertir sentido de giro<small>Actívalo si el coche del dibujo gira al revés que el tuyo</small></span><input type="checkbox" id="optInvertir"></label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Cámara</legend>
+      <label class="interruptor"><span>Detectar coches con la cámara<small>Orientativo. Con el móvil mirando por el parabrisas reconoce los coches de delante y avisa si uno queda muy cerca a un lado. No mide distancias y no sirve marcha atrás. La primera vez carga unos 18 MB</small></span><input type="checkbox" id="optCamara"></label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Pruebas</legend>
+      <label class="interruptor"><span>Modo simulación<small>Sustituye el giroscopio por un deslizador. Para probar en el ordenador</small></span><input type="checkbox" id="optSim"></label>
+    </fieldset>
+
+    <button class="btn-cerrar" value="cerrar">Guardar y cerrar</button>
+  </form>
+</dialog>
+
+<script>
+(() => {
+  'use strict';
+
+  /* ───────────── Configuración persistente ───────────── */
+  const CLAVE = 'escuadra.ajustes';
+  const porDefecto = {
+    objetivo: 90, linea: false, tolerancia: 2,
+    sonido: true, voz: true, cantar: false, anticipar: true, aprender: true, aprendido: 0,
+    camara: false, atras: false, invertir: false, sim: false,
+  };
+  const cfg = Object.assign({}, porDefecto, leerAjustes());
+
+  function leerAjustes() { try { return JSON.parse(localStorage.getItem(CLAVE) || '{}'); } catch { return {}; } }
+  function guardarAjustes() { try { localStorage.setItem(CLAVE, JSON.stringify(cfg)); } catch { /* sin almacenamiento: seguimos en memoria */ } }
+
+  /* ───────────── Estado ───────────── */
+  // fase: inicio | buscando | sinSensor | lista | calibrando | guiando
+  const st = {
+    fase: 'inicio',
+    fuente: null,            // 'giro' | 'brujula' | 'sim'
+    giro: 0,                 // grados girados desde la referencia (+ izquierda)
+    vel: 0,                  // °/s
+    sesgo: 0,                // deriva del giroscopio en reposo, °/s
+    G: null,                 // vector "arriba" en ejes del móvil (de la gravedad)
+    tAnterior: null,
+    alfaAnterior: null,
+    tAlfa: null,
+    cal: null,               // acumuladores de calibración
+    quieto: null,            // acumuladores de reposo durante la guía
+    giroVisto: false,
+    brujulaVista: false,
+    lado: 0,                 // +1 izquierda, -1 derecha, 0 aún no se sabe
+    zona: 'sin',             // sin | lejos | cerca | ok | pasado
+    mensaje: null,           // { texto, tono }
+    proximoPitido: 0,
+    etapa: 1,                // en línea: 1 = hacia los 45°, 2 = contragirando a 0°
+    maxAvance: 0,
+    enderezaAvisado: false,
+    aprendizaje: null,       // { min, hasta } mientras se mide cuánto se pasa tras el aviso
+    vozUmbral: 0,
+    avanceDibujo: null, escenaClave: null,
+    tSim: null, giroSim: 0,
+  };
+
+  const ES_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+                 (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+  /* ───────────── Sensores ─────────────
+     El giroscopio da velocidad angular en los tres ejes DEL MÓVIL. Como el móvil va
+     en un soporte con cualquier inclinación, ningún eje coincide con la vertical.
+     Proyectamos la velocidad angular sobre el vector "arriba" (obtenido de la gravedad
+     con el coche parado) y así sale el giro del coche sobre el suelo, esté el móvil
+     como esté. Después integramos en el tiempo, restando la deriva medida en reposo. */
+
+  function alMoverse(e) {
+    const w = e.rotationRate, a = e.accelerationIncludingGravity;
+    if (!w || w.alpha == null || !a || a.x == null) return;
+    st.giroVisto = true;
+    if (cfg.sim || st.fuente === 'brujula') return;
+
+    const t = e.timeStamp;
+    let dt = st.tAnterior == null ? 0 : (t - st.tAnterior) / 1000;
+    st.tAnterior = t;
+    if (dt < 0 || dt > 0.25) dt = 0;          // pestaña en segundo plano, saltos de reloj
+
+    const s = ES_IOS ? -1 : 1;                // iOS da la gravedad con el signo contrario
+    const gx = a.x * s, gy = a.y * s, gz = a.z * s;
+
+    // Fuera de la guía seguimos la gravedad con un filtro suave. Durante la guía se
+    // congela: frenazos y acelerones falsearían la vertical.
+    if (!st.G) st.G = [gx, gy, gz];
+    else if (st.fase !== 'guiando') {
+      const k = 0.05;
+      st.G[0] += (gx - st.G[0]) * k; st.G[1] += (gy - st.G[1]) * k; st.G[2] += (gz - st.G[2]) * k;
+    }
+    const n = Math.hypot(st.G[0], st.G[1], st.G[2]) || 1;
+
+    // rotationRate: beta = eje x, gamma = eje y, alpha = eje z (°/s)
+    const bruto = (w.beta * st.G[0] + w.gamma * st.G[1] + w.alpha * st.G[2]) / n;
+
+    if (st.fase === 'calibrando' && st.cal) {
+      const c = st.cal;
+      c.n++; c.suma += bruto; c.cuad += bruto * bruto;
+      c.g[0] += gx; c.g[1] += gy; c.g[2] += gz;
+      st.vel = bruto - st.sesgo;
+      return;
+    }
+
+    const vel = bruto - st.sesgo;
+    const velAntes = st.vel;
+    st.vel = vel;
+    if (st.fase !== 'guiando') return;
+
+    // Integración trapezoidal: media de la velocidad entre dos muestras, algo más fina
+    // que tomar solo la última cuando el giro acelera o frena.
+    st.giro += (vel + velAntes) / 2 * dt;
+
+    // Corrección en reposo: si el coche lleva 1,5 s parado, lo que marque el
+    // giroscopio es deriva pura. Se reajusta el sesgo y se refresca la vertical.
+    const acel = Math.hypot(gx, gy, gz);
+    const q = st.quieto || (st.quieto = nuevoReposo());
+    if (Math.abs(vel) < 0.4 && Math.abs(acel - n) < 0.35) {
+      q.t += dt; q.n++; q.suma += bruto; q.g[0] += gx; q.g[1] += gy; q.g[2] += gz;
+      if (q.t >= 1.5 && q.n > 20) {
+        st.sesgo += 0.5 * (q.suma / q.n - st.sesgo);
+        st.G = [q.g[0] / q.n, q.g[1] / q.n, q.g[2] / q.n];
+        st.quieto = nuevoReposo();
+      }
+    } else {
+      st.quieto = nuevoReposo();
+    }
+  }
+  const nuevoReposo = () => ({ t: 0, n: 0, suma: 0, g: [0, 0, 0] });
+
+  // Plan B para aparatos sin giroscopio: la brújula del navegador. Menos fina,
+  // y sensible a los hierros del coche, pero mejor que nada.
+  function alOrientarse(e) {
+    if (e.alpha == null) return;
+    st.brujulaVista = true;
+    if (cfg.sim || st.fuente !== 'brujula') return;
+    const t = e.timeStamp;
+    if (st.alfaAnterior != null) {
+      let d = e.alpha - st.alfaAnterior;
+      if (d > 180) d -= 360; else if (d < -180) d += 360;
+      const dt = (t - st.tAlfa) / 1000;
+      if (dt > 0 && dt < 0.5) st.vel = st.vel * 0.7 + (d / dt) * 0.3;
+      if (st.fase === 'guiando') st.giro += d;
+    }
+    st.alfaAnterior = e.alpha; st.tAlfa = t;
+  }
+
+  async function activarSensores() {
+    iniciarAudio();
+    pedirPantallaEncendida();
+    if (cfg.camara) encenderCamara();
+
+    if (cfg.sim) { st.fuente = 'sim'; st.fase = 'lista'; st.mensaje = null; return; }
+
+    try {
+      if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+        const r = await DeviceMotionEvent.requestPermission();
+        if (r !== 'granted') {
+          st.fase = 'sinSensor';
+          st.mensaje = { tono: 'error', texto: 'Has denegado el acceso al movimiento. Recarga la página y acepta el permiso.' };
+          return;
+        }
+      }
+    } catch { /* navegadores sin petición de permiso */ }
+
+    window.addEventListener('devicemotion', alMoverse);
+    window.addEventListener('deviceorientation', alOrientarse);
+    st.fase = 'buscando'; st.mensaje = null;
+    setTimeout(elegirFuente, 1400);
+  }
+
+  function elegirFuente() {
+    if (st.fase !== 'buscando') return;
+    if (st.giroVisto) { st.fuente = 'giro'; st.fase = 'lista'; }
+    else if (st.brujulaVista) {
+      st.fuente = 'brujula'; st.fase = 'lista';
+      st.mensaje = { tono: 'error', texto: 'Este aparato no tiene giroscopio. Uso la brújula, que es menos precisa dentro de un coche.' };
+    } else {
+      st.fase = 'sinSensor';
+      st.mensaje = {
+        tono: 'error',
+        texto: window.isSecureContext
+          ? 'No llegan datos de movimiento. En un ordenador o en una pantalla de coche sin giroscopio es lo normal.'
+          : 'El navegador solo da acceso a los sensores por HTTPS o en localhost. El LÉEME explica cómo.'
+      };
+    }
+  }
+
+  /* ───────────── Referencia y calibración ───────────── */
+  function marcarReferencia() {
+    iniciarAudio();
+    if (st.fuente === 'sim') {
+      simGiro.value = 0; st.giro = 0; st.giroSim = 0; st.vel = 0; st.lado = 0; empezarEtapa(1);
+      st.fase = 'guiando'; st.zona = 'lejos';
+      st.mensaje = null; decir('Referencia marcada'); tono(660, 90); tono(990, 120, 0.11);
+      return;
+    }
+    st.fase = 'calibrando';
+    st.mensaje = null;
+    st.cal = { n: 0, suma: 0, cuad: 0, g: [0, 0, 0] };
+    setTimeout(terminarCalibracion, st.fuente === 'brujula' ? 900 : 2000);
+  }
+
+  function terminarCalibracion() {
+    if (st.fase !== 'calibrando') return;
+    const c = st.cal; st.cal = null;
+
+    if (st.fuente === 'giro') {
+      if (!c || c.n < 20) {
+        st.fase = 'lista';
+        st.mensaje = { tono: 'error', texto: 'El giroscopio ha dejado de enviar datos. Marca la referencia otra vez.' };
+        return;
+      }
+      const media = c.suma / c.n;
+      const desv = Math.sqrt(Math.max(0, c.cuad / c.n - media * media));
+      if (desv > 1.2 || Math.abs(media) > 3) {
+        st.fase = 'lista';
+        st.mensaje = { tono: 'error', texto: 'El coche se estaba moviendo. Detente del todo y marca la referencia otra vez.' };
+        tono(240, 220);
+        return;
+      }
+      st.sesgo = media;
+      st.G = [c.g[0] / c.n, c.g[1] / c.n, c.g[2] / c.n];
+    }
+
+    st.giro = 0; st.lado = 0; st.vel = 0; st.quieto = null; empezarEtapa(1);
+    st.fase = 'guiando'; st.zona = 'lejos';
+    tono(660, 90); tono(990, 120, 0.11);
+    decir('Referencia marcada');
+  }
+
+  /* ───────────── Audio, voz, vibración, pantalla ───────────── */
+  let audio = null;
+  function iniciarAudio() {
+    try {
+      if (!audio) audio = new (window.AudioContext || window.webkitAudioContext)();
+      if (audio.state === 'suspended') audio.resume();
+    } catch { audio = null; }
+  }
+  function tono(hz, ms, espera = 0, volumen = 0.22) {
+    if (!audio || !cfg.sonido) return;
+    const t0 = audio.currentTime + espera, t1 = t0 + ms / 1000;
+    const osc = audio.createOscillator(), gan = audio.createGain();
+    osc.frequency.value = hz;
+    gan.gain.setValueAtTime(0, t0);
+    gan.gain.linearRampToValueAtTime(volumen, t0 + 0.008);
+    gan.gain.setValueAtTime(volumen, Math.max(t0 + 0.009, t1 - 0.02));
+    gan.gain.linearRampToValueAtTime(0, t1);
+    osc.connect(gan).connect(audio.destination);
+    osc.start(t0); osc.stop(t1 + 0.03);
+  }
+  function decir(texto) {
+    if (!cfg.voz || !('speechSynthesis' in window)) return;
+    try {
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(texto);
+      u.lang = 'es-ES'; u.rate = 1.05;
+      speechSynthesis.speak(u);
+    } catch { /* sin voz */ }
+  }
+  function vibrar(patron) { try { navigator.vibrate && navigator.vibrate(patron); } catch { /* sin vibración */ } }
+
+  let candado = null;
+  async function pedirPantallaEncendida() {
+    try { if ('wakeLock' in navigator) candado = await navigator.wakeLock.request('screen'); } catch { /* no disponible */ }
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && st.fase !== 'inicio') pedirPantallaEncendida();
+    st.tAnterior = null;
+  });
+
+  /* ───────────── Cálculo de la guía ─────────────
+     Batería/espiga: una sola etapa, girar hasta el ángulo de la plaza.
+     En línea: dos etapas, girar hasta 45° hacia la plaza y contragirar hasta volver a 0°. */
+  const ANGULO_LINEA = 45;
+
+  function objetivoEtapa() { return cfg.linea ? ANGULO_LINEA : cfg.objetivo; }
+
+  function empezarEtapa(n) {
+    st.etapa = n; st.maxAvance = 0;
+    st.enderezaAvisado = false; st.aprendizaje = null; st.vozUmbral = 0; st.proximoPitido = 0;
+  }
+
+  function calcular(ahora) {
+    const giro = (st.fuente === 'sim' ? parseFloat(simGiro.value) : st.giro) * (cfg.invertir && st.fuente !== 'sim' ? -1 : 1);
+    if (st.fuente === 'sim') {
+      st.giro = giro;
+      // En simulación la velocidad sale de derivar el deslizador.
+      if (st.tSim != null) {
+        const dt = (ahora - st.tSim) / 1000;
+        if (dt > 0.01) { st.vel = st.vel * 0.6 + ((giro - st.giroSim) / dt) * 0.4; st.tSim = ahora; st.giroSim = giro; }
+      } else { st.tSim = ahora; st.giroSim = giro; }
+    }
+
+    // El lado se decide solo: en cuanto el coche gira más de 6° hacia uno. A partir de
+    // 20° queda fijo, para que al contragirar (en línea) o corregir no cambie de idea.
+    if (Math.abs(giro) > 6 && (st.lado === 0 || Math.abs(giro) < 20)) st.lado = giro > 0 ? 1 : -1;
+    const avance = st.lado === 0 ? Math.abs(giro) : st.lado * giro;
+
+    let falta;
+    if (cfg.linea) {
+      if (st.etapa === 1) {
+        st.maxAvance = Math.max(st.maxAvance, avance);
+        // Ha llegado a los 45° y ya está deshaciendo el giro: segunda etapa.
+        // Ha girado bastante y ya está deshaciendo el giro: segunda etapa (aunque no llegara a 45°).
+        if (st.maxAvance >= 25 && avance < st.maxAvance - 4) {
+          empezarEtapa(2); st.zona = 'lejos';
+          tono(660, 90); tono(880, 90, 0.11);
+        }
+      }
+      falta = st.etapa === 1 ? ANGULO_LINEA - avance : avance;
+    } else {
+      falta = cfg.objetivo - avance;
+    }
+    // Velocidad con la que se acerca al objetivo (°/s), positiva si avanza hacia él.
+    const dir = cfg.linea && st.etapa === 2 ? -1 : 1;
+    const v = (st.lado || (giro >= 0 ? 1 : -1)) * st.vel * dir;
+    return { giro, falta, v, avance };
+  }
+
+  function actualizarZona(falta) {
+    if (st.fase !== 'guiando') { st.zona = 'sin'; return; }
+    const tol = cfg.tolerancia;
+    const antes = st.zona;
+    let z;
+    const margen = antes === 'ok' ? tol + 0.6 : tol;       // histéresis: que no parpadee en el borde
+    if (Math.abs(falta) <= margen) z = 'ok';
+    else if (falta < 0) z = 'pasado';
+    else z = falta <= 45 ? 'cerca' : 'lejos';
+
+    if (z !== antes) {
+      if (z === 'ok') {
+        tono(784, 110); tono(1175, 260, 0.12); vibrar([60, 40, 120]);
+        decir(cfg.linea && st.etapa === 1 ? 'Cuarenta y cinco. Gira el volante al otro lado' : 'Recto');
+      }
+      if (z === 'pasado' && antes === 'ok') { decir('Te has pasado'); vibrar(200); }
+      st.proximoPitido = 0;
+    }
+    st.zona = z;
+  }
+
+  function pitar(falta, ahora) {
+    if (st.fase !== 'guiando' || ahora < st.proximoPitido) return;
+    if (st.zona === 'cerca') {
+      const f = Math.min(1, Math.max(0, (falta - cfg.tolerancia) / (45 - cfg.tolerancia)));
+      tono(880, 55);
+      st.proximoPitido = ahora + 130 + f * 720;
+    } else if (st.zona === 'pasado') {
+      tono(300, 90); tono(300, 90, 0.16);
+      st.proximoPitido = ahora + 850;
+    }
+  }
+
+  // Voz que canta los grados que faltan, para no tener que mirar la pantalla.
+  const UMBRALES_VOZ = [60, 45, 30, 20, 15, 10, 5];
+  function cantarGrados(falta) {
+    if (st.fase !== 'guiando' || !cfg.voz || !cfg.cantar || st.zona === 'ok' || st.zona === 'pasado' || st.enderezaAvisado) return;
+    while (st.vozUmbral < UMBRALES_VOZ.length && UMBRALES_VOZ[st.vozUmbral] >= objetivoEtapa()) st.vozUmbral++;
+    if (st.vozUmbral < UMBRALES_VOZ.length && falta <= UMBRALES_VOZ[st.vozUmbral]) {
+      const u = UMBRALES_VOZ[st.vozUmbral];
+      while (st.vozUmbral < UMBRALES_VOZ.length && falta <= UMBRALES_VOZ[st.vozUmbral]) st.vozUmbral++;
+      if (falta > cfg.tolerancia) decir(`Faltan ${u}`);
+    }
+  }
+
+  /* ───────────── Aviso de "endereza" y aprendizaje ─────────────
+     El coche sigue girando un poco después del aviso: reacción del conductor más inercia
+     del volante. Con la velocidad de giro se calcula cuánto va a seguir girando y se avisa
+     antes. Lo que se pase (o se quede corto) en cada maniobra ajusta el aviso siguiente. */
+  const REACCION = 0.6;                 // segundos entre oír el aviso y empezar a enderezar
+
+  function avisarEndereza(falta, v, ahora) {
+    if (st.fase !== 'guiando' || !cfg.anticipar) return;
+    const aprendido = cfg.aprender ? cfg.aprendido : 0;
+    const margen = Math.max(0, v) * REACCION + aprendido;
+
+    if (st.enderezaAvisado) {
+      // Se rearma si el conductor paró de girar antes de llegar: hará falta otro aviso.
+      if (falta - margen > cfg.tolerancia + 4 && v < 2) st.enderezaAvisado = false;
+      return;
+    }
+    if (st.zona !== 'cerca' || v < 4 || falta - margen > cfg.tolerancia) return;
+
+    st.enderezaAvisado = true;
+    tono(1046, 60); tono(1046, 60, 0.09); tono(1046, 60, 0.18);
+    vibrar([40, 30, 40, 30, 40]);
+    decir(cfg.linea && st.etapa === 1 ? 'Ya. Al otro lado' : 'Endereza');
+    if (cfg.aprender) st.aprendizaje = { min: falta, hasta: ahora + 5000 };
+  }
+
+  function aprender(falta, ahora) {
+    const a = st.aprendizaje;
+    if (!a) return;
+    a.min = Math.min(a.min, falta);
+    if (ahora < a.hasta && st.fase === 'guiando') return;
+    st.aprendizaje = null;
+    // Solo cuenta si la maniobra llegó cerca del objetivo. Positivo = se pasó, negativo = corto.
+    if (st.fase !== 'guiando' || a.min > 6) return;
+    const error = -a.min;
+    cfg.aprendido = Math.max(-3, Math.min(12, Math.round((cfg.aprendido + 0.5 * error) * 10) / 10));
+    guardarAjustes();
+  }
+
+  /* ───────────── Pintado ───────────── */
+  const $ = id => document.getElementById(id);
+  const app = $('app'), frase = $('frase'), cifra = $('cifra'), girado = $('girado'), velocidad = $('velocidad'),
+        guia = $('guia'), principal = $('principal'), sensor = $('sensor'), escena = $('escena'), vista = $('vista'),
+        simulador = $('simulador'), simGiro = $('simGiro'), dlg = $('ajustes');
+
+  const GUIAS = {
+    inicio:     'Fija el móvil en el soporte. No hace falta que quede recto, solo que no se mueva.',
+    buscando:   'Buscando el giroscopio…',
+    sinSensor:  '',
+    lista:      'Pon el coche paralelo al carril, detente y marca la referencia.',
+    calibrando: 'Quieto dos segundos. Estoy midiendo la deriva del giroscopio.',
+    guiando:    'Maniobra hacia la plaza. Si cambias de plaza, marca la referencia otra vez.',
+    linea1:     'Volante hacia la acera y marcha atrás despacio. Te aviso al llegar a 45°.',
+    linea2:     'Volante al otro lado y sigue atrás hasta quedar paralelo a la acera.',
+  };
+  const BOTONES = {
+    inicio: 'Activar sensores', buscando: 'Buscando…', sinSensor: 'Probar con simulación',
+    lista: 'Marcar referencia', calibrando: 'Midiendo…', guiando: 'Marcar referencia',
+  };
+  const FUENTES = { giro: 'giroscopio', brujula: 'brújula', sim: 'simulación' };
+
+  let cache = {};
+  function poner(el, prop, valor) {
+    const k = el.id + prop;
+    if (cache[k] === valor) return;
+    cache[k] = valor;
+    if (prop === 'text') el.textContent = valor; else el.setAttribute(prop, valor);
+  }
+
+  function pintar(ahora) {
+    const { giro, falta, v, avance } = calcular(ahora);
+    actualizarZona(falta);
+    pitar(falta, ahora);
+    avisarEndereza(falta, v, ahora);
+    aprender(falta, ahora);
+    cantarGrados(falta);
+
+    poner(app, 'data-zona', st.zona);
+    poner(sensor, 'text', st.fuente ? FUENTES[st.fuente] : '');
+
+    // Dibujo: tu coche fijo en el centro mirando hacia arriba y la escena moviéndose alrededor.
+    const guiando = st.fase === 'guiando';
+    const clave = [cfg.linea, cfg.atras, cfg.objetivo].join();
+    if (st.escenaClave !== clave) { dibujarEscena(); st.escenaClave = clave; }
+    // Plaza a la derecha o a la izquierda: se deduce del sentido del giro. Entrando de frente
+    // giras hacia la plaza; marcha atrás (y en línea) el morro gira hacia el lado contrario.
+    const plazaDerecha = st.lado === 0 ? true : (cfg.linea || cfg.atras ? st.lado === 1 : st.lado === -1);
+    poner(escena, 'transform', plazaDerecha ? 'scale(1 1)' : 'scale(-1 1)');
+    // Suavizado: quita el temblor del sensor y evita saltos al decidir el lado.
+    const avanceObj = guiando ? avance : 0;
+    if (st.avanceDibujo == null) st.avanceDibujo = avanceObj;
+    st.avanceDibujo += (avanceObj - st.avanceDibujo) * 0.3;
+    if (Math.abs(avanceObj - st.avanceDibujo) < 0.05) st.avanceDibujo = avanceObj;
+    // Tramo recto final (batería/espiga): una vez recto, el coche entra derecho en la plaza.
+    const dtFrame = st.tPintado == null ? 0 : Math.min(0.1, (ahora - st.tPintado) / 1000);
+    st.tPintado = ahora;
+    const entrando = guiando && !cfg.linea && st.zona === 'ok';
+    st.entrada = Math.max(0, Math.min(1, (st.entrada || 0) + dtFrame * (entrando ? 0.45 : -1.5)));
+    const q = postura(geometria(), st.avanceDibujo, guiando ? st.etapa : 1, st.entrada);
+    // Centro del coche en el mundo; la vista lo lleva al origen con el rumbo hacia arriba.
+    let c = suma(q.p, detras(q.h), -EJE), h = q.h;
+    if (!plazaDerecha) { c = [-c[0], c[1]]; h = -h; }
+    poner(vista, 'transform', `rotate(${(-h).toFixed(1)}) translate(${(-c[0]).toFixed(1)} ${(-c[1]).toFixed(1)})`);
+
+    // Encuadre: la vista se ajusta para que tu coche y la plaza (con sus vecinos) llenen el
+    // dibujo, sin huecos de más. Se suaviza para que no dé tirones.
+    let x0 = -130, x1 = 130, y0 = -150, y1 = 140;                    // tu coche, con margen
+    for (const w of st.puntosVista || []) {
+      const wm = plazaDerecha ? w : [-w[0], w[1]];
+      const v = rot(suma(wm, c, -1), -h);                            // punto en la vista
+      x0 = Math.min(x0, v[0] - 130); x1 = Math.max(x1, v[0] + 130);
+      y0 = Math.min(y0, v[1] - 140); y1 = Math.max(y1, v[1] + 140);
+    }
+    const objetivoVb = [x0, y0, x1 - x0, y1 - y0];
+    if (!st.vb) st.vb = objetivoVb;
+    st.vb = st.vb.map((a, i) => a + (objetivoVb[i] - a) * 0.12);
+    poner($('escenaSvg'), 'viewBox', st.vb.map(a => a.toFixed(0)).join(' '));
+
+    const etapa1 = cfg.linea && st.etapa === 1;
+    if (!guiando) {
+      poner(frase, 'text', 'Sin referencia');
+      poner(cifra, 'text', (cfg.linea ? ANGULO_LINEA : cfg.objetivo) + '°');
+    } else if (cfg.linea) {
+      // En línea el número es el ángulo real del coche: sube hasta 45 y vuelve a 0.
+      const a = Math.round(avance);
+      if (st.zona === 'ok') {
+        poner(frase, 'text', etapa1 ? 'Ahora volante al otro lado' : 'Recto. Endereza el volante');
+        poner(cifra, 'text', etapa1 ? a + '°' : 'Recto');
+      } else if (st.zona === 'pasado') {
+        poner(frase, 'text', etapa1 ? 'Pasado de 45°: contragira ya' : 'Te has pasado: gira un poco atrás');
+        poner(cifra, 'text', a + '°');
+      } else {
+        poner(frase, 'text', st.enderezaAvisado ? (etapa1 ? 'Ya: volante al otro lado' : 'Endereza ya')
+                                                : (etapa1 ? 'Marcha atrás girando hasta 45°' : 'Contragira hasta 0°'));
+        poner(cifra, 'text', a + '°');
+      }
+    } else if (st.zona === 'ok') {
+      const d = Math.abs(falta);
+      poner(frase, 'text', d < 0.5 ? 'Paralelo a las líneas' : `Desviación de ${d.toFixed(0)}°`);
+      poner(cifra, 'text', 'Recto');
+    } else if (st.zona === 'pasado') {
+      poner(frase, 'text', 'Te has pasado');
+      poner(cifra, 'text', Math.round(-falta) + '°');
+    } else {
+      poner(frase, 'text', st.enderezaAvisado ? 'Endereza ya' : 'Faltan');
+      poner(cifra, 'text', Math.round(falta) + '°');
+    }
+
+    const g = Math.round(Math.abs(giro));
+    poner(girado, 'text', st.fase === 'guiando' && g > 0 ? `${g}° a la ${giro > 0 ? 'izquierda' : 'derecha'}` : '0°');
+    poner(velocidad, 'text', Math.abs(st.vel).toFixed(0) + '°/s');
+
+    const m = st.mensaje;
+    const guiaTexto = st.fase === 'guiando' && cfg.linea ? GUIAS[st.etapa === 1 ? 'linea1' : 'linea2'] : GUIAS[st.fase];
+    poner(guia, 'text', m ? m.texto : guiaTexto);
+    poner(guia, 'data-tono', m ? m.tono : 'normal');
+    poner(principal, 'text', BOTONES[st.fase]);
+    principal.disabled = st.fase === 'buscando' || st.fase === 'calibrando';
+    simulador.classList.toggle('visible', st.fuente === 'sim');
+
+    requestAnimationFrame(pintar);
+  }
+
+  /* ───────────── Escena: vista desde arriba con trayectoria ─────────────
+     Modelo de giro de coche: al girar, el centro del eje trasero describe un arco de radio R
+     alrededor de un punto situado en la prolongación del eje trasero. Como solo se mide el
+     ángulo, la posición sale de suponer un radio de giro típico. Unidades: 50 por metro; el
+     coche dibujado mide 4,2 m. Todo se calcula con la plaza a la derecha; si está a la
+     izquierda, el grupo de la escena se dibuja en espejo. Rumbos: 0 = arriba, horario positivo. */
+  const U = 50, R_GIRO = 3.6 * U, EJE = 70;
+  const RECTA_FRENTE = 145, RECTA_ATRAS = 285;   // tramo recto final: el arco termina en la boca de la plaza
+  const rad = a => a * Math.PI / 180;
+  const rot = (v, a) => { const c = Math.cos(rad(a)), s = Math.sin(rad(a)); return [v[0] * c - v[1] * s, v[0] * s + v[1] * c]; };
+  const suma = (a, b, k = 1) => [a[0] + b[0] * k, a[1] + b[1] * k];
+  const derecha = h => rot([1, 0], h);        // hacia la derecha del coche
+  const detras = h => rot([0, 1], h);         // hacia la parte trasera del coche
+
+  function geometria() {
+    if (cfg.linea) {
+      // Final: en el hueco, rumbo -90 (mirando a la izquierda, sentido de la calle).
+      const rearF = [EJE, 0];
+      const C2 = suma(rearF, [0, R_GIRO]);                     // pivote del contragiro (volante a la izquierda)
+      const rearMid = suma(C2, rot(suma(rearF, C2, -1), -45)); // eje trasero cuando el coche está a 45°
+      const C1 = suma(rearMid, derecha(-135), R_GIRO);         // pivote del primer giro (volante a la derecha)
+      return { rearF, C2, rearMid, C1 };
+    }
+    // Batería/espiga: partiendo por el carril (rumbo -90) con la plaza a la derecha. De frente
+    // el rumbo gira en sentido horario; marcha atrás, con el volante a la derecha, el morro
+    // gira en sentido antihorario. En ambos casos el pivote queda a la derecha del coche.
+    const obj = cfg.objetivo, s = cfg.atras ? 1 : -1;
+    const hf = cfg.atras ? -90 - obj : -90 + obj;
+    const rearF = suma([0, 0], detras(hf), EJE);
+    // El arco termina en la boca de la plaza (así el coche no barre a los vecinos) y el
+    // último tramo se hace recto. Hacia el carril: por detrás si entras de frente, por
+    // delante si entras marcha atrás.
+    const haciaCarril = suma([0, 0], detras(hf), cfg.atras ? -1 : 1);
+    // El vecino del lado del pivote no debe quedar dentro del barrido del coche: se alarga
+    // el tramo recto hasta que todas sus esquinas queden fuera del radio interior del giro.
+    // Hace falta sobre todo en espiga, donde el pivote cae muy cerca del vecino.
+    const vecino = suma([0, 0], derecha(hf), 140);
+    const esquinas = [];
+    for (const a of [-1, 1]) for (const b of [-1, 1]) esquinas.push(suma(suma(vecino, derecha(hf), 46 * a), detras(hf), 104 * b));
+    let recta = cfg.atras ? RECTA_ATRAS : RECTA_FRENTE, rearE, C;
+    for (let i = 0; i < 40; i++, recta += 10) {
+      rearE = suma(rearF, haciaCarril, recta);
+      C = suma(rearE, derecha(hf), R_GIRO);
+      if (esquinas.every(P => Math.hypot(C[0] - P[0], C[1] - P[1]) >= R_GIRO - 46 + 8)) break;
+    }
+    return { hf, rearF, rearE, C, s };
+  }
+
+  // Posición del eje trasero (p) y rumbo (h) para un avance dado, en grados girados.
+  // "entrada" (0..1) es lo recorrido del tramo recto final, solo en batería/espiga.
+  function postura(g, avance, etapa, entrada = 0) {
+    if (cfg.linea) {
+      const h = -90 - avance;
+      if (etapa === 1) return { h, p: suma(g.C1, rot(suma(g.rearMid, g.C1, -1), 45 - avance)) };
+      return { h, p: suma(g.C2, rot(suma(g.rearF, g.C2, -1), -avance)) };
+    }
+    const falta = cfg.objetivo - avance;
+    let p = suma(g.C, rot(suma(g.rearE, g.C, -1), g.s * falta));
+    if (entrada > 0) p = suma(p, suma(g.rearF, g.rearE, -1), entrada);
+    return { h: g.hf + g.s * falta, p };
+  }
+
+  // Parte fija: carril, plazas, coches vecinos, silueta del sitio final y trayectoria.
+  function dibujarEscena() {
+    const NS = 'http://www.w3.org/2000/svg', fijo = $('fijo'), svg = $('escenaSvg');
+    fijo.textContent = '';
+    const add = (tag, attrs) => {
+      const e = document.createElementNS(NS, tag);
+      for (const k in attrs) e.setAttribute(k, attrs[k]);
+      fijo.appendChild(e); return e;
+    };
+    const cocheEn = (clase, x, y, h) => {
+      const e = add('use', { class: clase, transform: `translate(${x} ${y}) rotate(${h})` });
+      e.setAttributeNS('http://www.w3.org/1999/xlink', 'href', '#formaCoche');
+      e.setAttribute('href', '#formaCoche');
+    };
+    const g = geometria();
+
+    if (cfg.linea) {
+      add('rect', { class: 'acera', x: -3000, y: -3000, width: 6000, height: 2940 });
+      add('line', { class: 'bordillo', x1: -3000, y1: -60, x2: 3000, y2: -60 });
+      cocheEn('vecino', -268, 0, -90); cocheEn('vecino', 268, 0, -90);
+    } else {
+      const hb = cfg.atras ? 90 - cfg.objetivo : cfg.objetivo - 90;   // inclinación de las plazas
+      for (const x of [-350, -210, -70, 70, 210, 350]) add('line', { class: 'linea-plaza', x1: x, y1: -125, x2: x, y2: 125, transform: `rotate(${hb})` });
+      const hv = hb + (cfg.atras ? 180 : 0);
+      for (const x of [-280, -140, 140, 280]) cocheEn('vecino', ...rot([x, 0], hb), hv);
+    }
+
+    // Silueta del sitio final y trayectoria del centro del coche (arco más tramo recto).
+    const fin = postura(g, cfg.linea ? 0 : cfg.objetivo, 2, 1);
+    const cf = suma(fin.p, detras(fin.h), -EJE);
+    cocheEn('fantasma', cf[0], cf[1], fin.h);
+    // Puntos que el encuadre debe mantener a la vista: el sitio final y sus vecinos.
+    st.puntosVista = cfg.linea ? [cf, [-268, 0], [268, 0]] : [cf, rot([-140, 0], fin.h), rot([140, 0], fin.h)];
+
+    let d = '';
+    const N = 48;
+    for (let i = 0; i <= N + (cfg.linea ? 0 : 1); i++) {
+      let avance, etapa = 1, entrada = 0;
+      if (cfg.linea) { const t = i / N * 90; etapa = t <= 45 ? 1 : 2; avance = t <= 45 ? t : 90 - t; }
+      else { avance = Math.min(i, N) / N * cfg.objetivo; entrada = i > N ? 1 : 0; }
+      const q = postura(g, avance, etapa, entrada), c = suma(q.p, detras(q.h), -EJE);
+      d += (i ? ' L' : 'M') + c[0].toFixed(1) + ',' + c[1].toFixed(1);
+    }
+    add('path', { class: 'trayecto', d });
+  }
+
+  /* ───────────── Cámara: coches cercanos (orientativo) ─────────────
+     Un modelo de visión (COCO-SSD, guardado en la carpeta modelo/) reconoce coches en la
+     imagen de la cámara trasera del móvil, que mira por el parabrisas. No mide distancias:
+     estima "cerca" por lo grande que sale el coche en la imagen. Solo sirve entrando de frente. */
+  const elCamara = $('camara'), elVideo = $('video'), elLienzo = $('lienzo'), camaraEstado = $('camaraEstado');
+  const VEHICULOS = new Set(['car', 'truck', 'bus', 'motorcycle']);
+  const cam = { activa: false, modelo: null, flujo: null, ultimoAviso: 0, ultimoZumbido: 0, clave: '' };
+
+  function cargarScript(src) {
+    return new Promise((ok, ko) => {
+      if (document.querySelector(`script[src="${src}"]`)) return ok();
+      const s = document.createElement('script');
+      s.src = src; s.onload = ok; s.onerror = () => ko(new Error('No se pudo cargar ' + src));
+      document.head.appendChild(s);
+    });
+  }
+
+  async function encenderCamara() {
+    if (cam.activa) return;
+    cam.activa = true;
+    elCamara.hidden = false;
+    poner(camaraEstado, 'text', 'Cargando la detección…');
+    poner(camaraEstado, 'data-nivel', '');
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error('sin cámara');
+      if (!cam.modelo) {
+        await cargarScript('modelo/tf.min.js');
+        await cargarScript('modelo/coco-ssd.min.js');
+        cam.modelo = await cocoSsd.load({ base: 'lite_mobilenet_v2', modelUrl: 'modelo/model.json' });
+      }
+      if (!cam.activa) return;                    // la apagaron mientras cargaba
+      poner(camaraEstado, 'text', 'Abriendo la cámara…');
+      cam.flujo = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } }, audio: false,
+      });
+      if (!cam.activa) { apagarCamara(); return; }
+      elVideo.srcObject = cam.flujo;
+      await elVideo.play();
+      // Unos segundos con el nombre de la cámara abierta: si sale negra, se sabe cuál es.
+      const pista = cam.flujo.getVideoTracks()[0];
+      poner(camaraEstado, 'text', 'Cámara: ' + ((pista && pista.label) || 'sin nombre'));
+      setTimeout(() => { if (cam.activa && !cam.clave) poner(camaraEstado, 'text', ''); }, 4000);
+      detectar();
+    } catch (e) {
+      const permiso = e && (e.name === 'NotAllowedError' || e.name === 'SecurityError');
+      poner(camaraEstado, 'text', permiso
+        ? 'Has denegado la cámara. Actívala en los permisos del navegador.'
+        : 'No puedo usar la cámara aquí. ' + (window.isSecureContext ? '' : 'Hace falta HTTPS.'));
+      cam.activa = false;
+    }
+  }
+
+  function apagarCamara() {
+    cam.activa = false; cam.clave = '';
+    if (cam.flujo) { cam.flujo.getTracks().forEach(t => t.stop()); cam.flujo = null; }
+    elVideo.srcObject = null;
+    elCamara.hidden = true;
+  }
+
+  async function detectar() {
+    if (!cam.activa) return;
+    if (!cam.modelo || elVideo.readyState < 2) { setTimeout(detectar, 200); return; }
+    let cajas = [];
+    try { cajas = await cam.modelo.detect(elVideo, 6, 0.45); } catch { /* imagen no lista */ }
+    if (cam.activa) { pintarCajas(cajas); setTimeout(detectar, 100); }
+  }
+
+  function pintarCajas(cajas) {
+    const W = elVideo.videoWidth || 640, H = elVideo.videoHeight || 480;
+    if (elLienzo.width !== W || elLienzo.height !== H) { elLienzo.width = W; elLienzo.height = H; }
+    const ctx = elLienzo.getContext('2d');
+    ctx.clearRect(0, 0, W, H);
+    ctx.lineWidth = Math.max(3, W / 160);
+    ctx.font = `bold ${Math.round(W / 26)}px ${getComputedStyle(document.body).fontFamily}`;
+
+    let peor = { nivel: 0, lado: '' };
+    for (const c of cajas) {
+      if (!VEHICULOS.has(c.class)) continue;
+      const [x, y, w, h] = c.bbox;
+      const alto = h / H, ancho = w / W, cx = (x + w / 2) / W;
+      // Cuanto más grande sale el coche, más cerca está. Umbrales conservadores.
+      const nivel = alto > 0.5 || ancho > 0.55 ? 2 : alto > 0.3 || ancho > 0.35 ? 1 : 0;
+      const lado = cx < 0.42 ? 'izquierda' : cx > 0.58 ? 'derecha' : 'delante';
+      const color = nivel === 2 ? '#FF6B6B' : nivel === 1 ? '#FFB703' : '#3DCB80';
+      ctx.strokeStyle = color; ctx.strokeRect(x, y, w, h);
+      ctx.fillStyle = color; ctx.fillText(nivel === 2 ? 'muy cerca' : nivel === 1 ? 'cerca' : 'coche', x + 6, y + W / 26 + 4);
+      if (nivel > peor.nivel || (nivel === peor.nivel && nivel > 0 && lado === 'delante')) peor = { nivel, lado };
+    }
+
+    const ahora = performance.now();
+    const texto = peor.nivel === 2 ? `Coche muy cerca ${peor.lado === 'delante' ? 'delante' : 'a la ' + peor.lado}`
+                : peor.nivel === 1 ? `Coche cerca ${peor.lado === 'delante' ? 'delante' : 'a la ' + peor.lado}` : '';
+    poner(camaraEstado, 'text', texto);
+    poner(camaraEstado, 'data-nivel', peor.nivel === 2 ? 'muy' : peor.nivel === 1 ? 'cerca' : '');
+
+    const clave = peor.nivel ? peor.nivel + peor.lado : '';
+    if (clave && clave !== cam.clave && ahora - cam.ultimoAviso > 2500) {
+      decir(texto); cam.ultimoAviso = ahora;
+      if (peor.nivel === 2) vibrar([120, 60, 120]);
+    }
+    cam.clave = clave;
+    // Zumbido grave mientras haya un coche muy cerca, distinto de los pitidos del ángulo.
+    if (peor.nivel === 2 && ahora - cam.ultimoZumbido > 900) { tono(180, 160, 0, 0.3); cam.ultimoZumbido = ahora; }
+  }
+
+  /* ───────────── Eventos ───────────── */
+  principal.addEventListener('click', () => {
+    if (st.fase === 'inicio') activarSensores();
+    else if (st.fase === 'sinSensor') { cfg.sim = true; guardarAjustes(); sincronizarAjustes(); activarSensores(); }
+    else if (st.fase === 'lista' || st.fase === 'guiando') marcarReferencia();
+  });
+
+  let demo = null;
+  $('simDemo').addEventListener('click', () => {
+    cancelAnimationFrame(demo);
+    if (st.fase !== 'guiando') marcarReferencia();
+    // Plaza a la derecha: de frente el morro gira a la derecha; marcha atrás y en línea, a la
+    // izquierda. Se pasa unos grados y corrige: lo que ocurre de verdad.
+    const T = cfg.linea ? ANGULO_LINEA : (cfg.atras ? cfg.objetivo : -cfg.objetivo);
+    const pasos = cfg.linea
+      ? [[0, 0], [1200, 0], [4200, T * 0.7], [5800, T - 3], [6800, T - 3], [8200, T * 0.5], [10200, 2], [11200, 0]]
+      : [[0, 0], [1200, 0], [5200, T * 0.72], [7600, T - 4], [8600, T - 4], [10200, T]];
+    const t0 = performance.now();
+    const paso = ahora => {
+      const t = ahora - t0;
+      let i = pasos.findIndex(p => p[0] > t);
+      if (i === -1) { simGiro.value = T; return; }
+      const [ta, va] = pasos[i - 1], [tb, vb] = pasos[i];
+      const u = (t - ta) / (tb - ta), suave = u * u * (3 - 2 * u);
+      simGiro.value = va + (vb - va) * suave;
+      demo = requestAnimationFrame(paso);
+    };
+    demo = requestAnimationFrame(paso);
+  });
+  simGiro.addEventListener('pointerdown', () => cancelAnimationFrame(demo));
+
+  function textoAprendido() {
+    const a = cfg.aprendido;
+    if (!a) return 'Aún no ha aprendido nada: el aviso llega solo según la velocidad de giro.';
+    return a > 0 ? `Ahora adelanta el aviso ${a}° más porque sueles pasarte.` : `Ahora retrasa el aviso ${-a}° porque sueles quedarte corto.`;
+  }
+  function sincronizarAjustes() {
+    const plaza = cfg.linea ? 'linea' : String(cfg.objetivo);
+    dlg.querySelectorAll('[name=plaza]').forEach(r => r.checked = r.value === plaza);
+    dlg.querySelectorAll('[name=tolerancia]').forEach(r => r.checked = +r.value === cfg.tolerancia);
+    $('optSonido').checked = cfg.sonido; $('optVoz').checked = cfg.voz; $('optCantar').checked = cfg.cantar;
+    $('optAnticipar').checked = cfg.anticipar; $('optAprender').checked = cfg.aprender;
+    $('optCamara').checked = cfg.camara;
+    $('aprendidoTexto').textContent = textoAprendido();
+    $('optAtras').checked = cfg.atras;   $('optInvertir').checked = cfg.invertir;
+    $('optSim').checked = cfg.sim;
+  }
+  $('abrirAjustes').addEventListener('click', () => { sincronizarAjustes(); dlg.showModal(); });
+  $('olvidar').addEventListener('click', () => {
+    cfg.aprendido = 0; guardarAjustes(); $('aprendidoTexto').textContent = textoAprendido();
+  });
+  dlg.addEventListener('close', () => {
+    const simAntes = cfg.sim, lineaAntes = cfg.linea;
+    const plaza = (dlg.querySelector('[name=plaza]:checked') || { value: '90' }).value;
+    cfg.linea = plaza === 'linea';
+    cfg.objetivo = cfg.linea ? 90 : +plaza;
+    cfg.tolerancia = +(dlg.querySelector('[name=tolerancia]:checked') || { value: 2 }).value;
+    cfg.sonido = $('optSonido').checked; cfg.voz = $('optVoz').checked; cfg.cantar = $('optCantar').checked;
+    cfg.anticipar = $('optAnticipar').checked; cfg.aprender = $('optAprender').checked;
+    cfg.camara = $('optCamara').checked;
+    cfg.atras  = $('optAtras').checked;  cfg.invertir = $('optInvertir').checked;
+    cfg.sim    = $('optSim').checked;
+    guardarAjustes(); iniciarAudio();
+
+    // La cámara solo se enciende con los sensores ya activados (así el permiso llega tras un toque).
+    if (cfg.camara && st.fase !== 'inicio') encenderCamara();
+    if (!cfg.camara) apagarCamara();
+
+    if (cfg.linea !== lineaAntes && st.fase === 'guiando') {   // otra maniobra: empezar de cero
+      cancelAnimationFrame(demo);
+      st.fase = 'lista'; st.giro = 0; st.lado = 0; simGiro.value = 0; empezarEtapa(1);
+    }
+    if (cfg.sim !== simAntes) {                 // cambiar de fuente obliga a empezar de cero
+      cancelAnimationFrame(demo);
+      st.fuente = null; st.fase = 'inicio'; st.mensaje = null; st.giro = 0; st.lado = 0; simGiro.value = 0;
+      if (cfg.sim) activarSensores();
+    }
+  });
+
+  // Instalable y utilizable sin cobertura (solo con HTTPS o localhost)
+  if ('serviceWorker' in navigator && window.isSecureContext && /^https?:$/.test(location.protocol)) {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+
+  sincronizarAjustes();
+  if (cfg.sim) activarSensores();
+  requestAnimationFrame(pintar);
+})();
+</script>
+</body>
+</html>
