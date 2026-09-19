@@ -53,10 +53,10 @@ todo está en la carpeta. Condiciones:
 1. Fija el móvil en un soporte rígido. Da igual la inclinación, pero no puede moverse durante la maniobra.
    La app mide cuánto gira el móvil: en el soporte, eso es cuánto gira el coche; en la mano, cualquier
    giro de muñeca cuenta como giro del coche. Si detecta que el móvil se inclina o se sacude, avisa.
-2. Pulsa **Empezar**.
-3. Coloca el coche recto en el pasillo, **detente del todo** y pulsa **Estoy recto**. Durante
-   dos segundos la app se calibra; no te muevas.
-4. Maniobra. Los pitidos se aceleran según te acercas; triple pitido agudo = endereza ya; doble
+2. Coloca el coche recto en el pasillo, **detente del todo** y pulsa **Estoy recto**. Un solo toque:
+   enciende los sensores (la primera vez pide permiso) y toma la referencia. Durante dos segundos la
+   app se calibra; no te muevas.
+3. Maniobra. Los pitidos se aceleran según te acercas; triple pitido agudo = endereza ya; doble
    tono agudo = recto; doble tono grave = te has pasado.
 
 Da igual hacia dónde mire el coche (norte, este…), de qué lado esté el volante o si la plaza
@@ -100,6 +100,14 @@ Contadas con la plaza a la derecha; a la izquierda es igual pero al revés.
 - **En línea**: al lado del coche de delante del hueco, a medio metro, trasera con trasera. "Estoy
   recto", volante a tope hacia la acera, marcha atrás. Cuando diga "volante al otro lado", a tope
   al otro lado y sigue atrás. "Recto" = para, volante derecho y avanza un poco para centrarte.
+
+## Salir de la plaza
+
+Encima del botón grande hay un selector **Entrar en la plaza / Salir de la plaza** (solo en batería y
+espiga; en línea no hay un ángulo fijo de salida). Al salir, la maniobra es la de entrar al revés: con
+el coche recto dentro de la plaza pulsas "Estoy recto", sales recto, y cuando el hombro pasa la línea
+de los coches de al lado giras a tope hacia el pasillo; "recto" significa paralelo al pasillo. El
+dibujo y el tutorial muestran la salida, y la silueta de destino se pone en el pasillo.
 
 ## ¿Avanza o retrocede?
 
