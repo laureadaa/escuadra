@@ -51,6 +51,8 @@ todo está en la carpeta. Condiciones:
 ## Uso en el coche
 
 1. Fija el móvil en un soporte rígido. Da igual la inclinación, pero no puede moverse durante la maniobra.
+   La app mide cuánto gira el móvil: en el soporte, eso es cuánto gira el coche; en la mano, cualquier
+   giro de muñeca cuenta como giro del coche. Si detecta que el móvil se inclina o se sacude, avisa.
 2. Pulsa **Empezar**.
 3. Coloca el coche recto en el pasillo, **detente del todo** y pulsa **Estoy recto**. Durante
    dos segundos la app se calibra; no te muevas.

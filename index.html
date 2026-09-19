@@ -449,6 +449,25 @@
     } else {
       st.quieto = nuevoReposo();
     }
+
+    // ¿Se está manipulando el móvil? Un coche aparcando gira sobre la vertical con la gravedad
+    // quieta y sin tirones. Si el móvil se inclina respecto a la vertical calibrada o recibe
+    // sacudidas, casi seguro que lo han cogido con la mano: se avisa (sin parar la medida,
+    // porque un bache en el garaje también podría dispararlo).
+    if (!st.Gm) st.Gm = [gx, gy, gz];
+    else { const k = 0.15; st.Gm[0] += (gx - st.Gm[0]) * k; st.Gm[1] += (gy - st.Gm[1]) * k; st.Gm[2] += (gz - st.Gm[2]) * k; }
+    const nm = Math.hypot(st.Gm[0], st.Gm[1], st.Gm[2]) || 1;
+    const cosInc = (st.Gm[0] * st.G[0] + st.Gm[1] * st.G[1] + st.Gm[2] * st.G[2]) / (nm * n);
+    const inclinado = cosInc < Math.cos(12 * Math.PI / 180);
+    const sacudido = Math.abs(acel - n) > 3;
+    st.tManip = inclinado || sacudido ? (st.tManip || 0) + dt : 0;
+    if (st.tManip > 0.4 && !st.mensajeMovil) {
+      st.mensajeMovil = true;
+      st.mensaje = { tono: 'error', texto: 'Parece que el móvil se ha movido del soporte. Fíjalo bien y pulsa "Estoy recto" otra vez.' };
+      vibrar([80, 60, 80]);
+    }
+    st.tEstable = inclinado || sacudido ? 0 : (st.tEstable || 0) + dt;
+    if (st.mensajeMovil && st.tEstable > 3) { st.mensajeMovil = false; if (st.mensaje && st.mensaje.texto.startsWith('Parece que el móvil')) st.mensaje = null; }
   }
   const nuevoReposo = () => ({ t: 0, n: 0, suma: 0, g: [0, 0, 0] });
 
@@ -548,6 +567,7 @@
     }
 
     st.giro = 0; st.lado = 0; st.vel = 0; st.quieto = null; empezarEtapa(1);
+    st.Gm = null; st.tManip = 0; st.tEstable = 0; st.mensajeMovil = false;
     st.fase = 'guiando'; st.zona = 'lejos';
     tono(660, 90); tono(990, 120, 0.11);
     decir('Vale, gira');
