@@ -59,32 +59,34 @@ async function crearEntorno(ajustesGuardados) {
   }
   for (const id of ids) env.els[id] = nuevoEl('div', id);
   // Radios de los ajustes
-  const radios = { plaza: ['90', '60', '45', 'linea'], tolerancia: ['1', '2', '3'], cochePreset: ['pequeno', 'mediano', 'grande'] };
+  const radios = { plaza: ['90', '60', '45', 'linea'], tolerancia: ['1', '2', '3'], cochePreset: ['pequeno', 'mediano', 'grande'], tema: ['auto', 'claro', 'oscuro'], retardo: ['0', '300', '600', '1000'] };
   for (const name in radios) for (const v of radios[name]) { const e = nuevoEl('input', 'radio_' + name + '_' + v); e.name = name; e.value = v; env.els[e.id] = e; }
   env.el = id => env.els[id];
   env.radio = (name, v) => { for (const e of Object.values(env.els)) if (e.name === name) e.checked = e.value === v; };
 
   global.window = {
     addEventListener(t, f) { (env.oyentes[t] = env.oyentes[t] || []).push(f); },
-    isSecureContext: true,
+    isSecureContext: true, matchMedia: () => ({ matches: env.oscuro || false }),
     get speechSynthesis() { return global.speechSynthesis; },
     AudioContext: function () {
       this.state = 'running'; this.currentTime = env.now / 1000; this.destination = {};
       this.createOscillator = () => { const o = { frequency: {}, connect(g) { return g; }, start() { env.log.push([env.now, 'tono', Math.round(o.frequency.value)]); }, stop() {} }; return o; };
       this.createGain = () => ({ gain: { setValueAtTime() {}, linearRampToValueAtTime() {} }, connect(d) { return d; } });
       this.resume = () => {};
+      this.createStereoPanner = () => { const p = { pan: { value: 0 }, connect(d) { env.log.push([env.now, 'pan', p.pan.value]); return d; } }; return p; };
     },
   };
   global.document = {
     getElementById: id => env.els[id] || null,
     addEventListener(t, f) { (env.oyentesDoc[t] = env.oyentesDoc[t] || []).push(f); },
     createElementNS: (ns, tag) => nuevoEl(tag), createElement: tag => nuevoEl(tag),
-    querySelector: () => null, visibilityState: 'visible', body: { style: {} },
+    querySelector: () => null, visibilityState: 'visible', body: { style: {} }, documentElement: { setAttribute() {} },
     head: { appendChild() {} },
   };
   global.getComputedStyle = () => ({ fontFamily: 'x' });
   Object.defineProperty(global, 'navigator', { value: { userAgent: 'node', platform: 'x', maxTouchPoints: 0, vibrate() { env.log.push([env.now, 'vibra', 1]); } }, configurable: true, writable: true });
-  global.localStorage = { getItem: () => JSON.stringify(ajustesGuardados || {}), setItem(k, v) { env.guardado = JSON.parse(v); } };
+  env.almacen = {};
+  global.localStorage = { getItem: k => k === 'escuadra.ajustes' ? JSON.stringify(ajustesGuardados || {}) : (env.almacen[k] || null), setItem(k, v) { if (k === 'escuadra.ajustes') env.guardado = JSON.parse(v); env.almacen[k] = v; } };
   global.speechSynthesis = { cancel() {}, speak(u) { env.log.push([env.now, 'voz', u.text]); } };
   global.SpeechSynthesisUtterance = function (t) { this.text = t; };
   global.location = { protocol: 'https:' };
@@ -632,6 +634,48 @@ prueba('Dibujo con navegación a estima: recto hacia atrás 1 s mueve el coche; 
   await e.avanzar(12000);
   cierto(e.textos('cifra').includes('Recto'));
 });
+
+
+seccion('\n9. Novedades v15');
+prueba('Modo noche automático: con el móvil en oscuro, tema oscuro; en claro y de día, claro; forzado manda', async () => {
+  const e = await crearEntorno({}); e.oscuro = true; await e.avanzar(1200); igual(e.el('app').attrs['data-tema'], 'oscuro');
+  const e2 = await crearEntorno({ tema: 'claro' }); e2.oscuro = true; await e2.avanzar(1200); igual(e2.el('app').attrs['data-tema'], 'claro');
+  const e3 = await crearEntorno({ tema: 'oscuro' }); await e3.avanzar(1200); igual(e3.el('app').attrs['data-tema'], 'oscuro');
+});
+prueba('Retardo Bluetooth de 1 s: el aviso de endereza llega con más grados de margen', async () => {
+  const cuando = async (retardo) => {
+    const e = await caso({ retardo }, sensorCoche(rampa(4, 20, 90)), 12000);
+    const i = e.log.findIndex(l => l[1] === 'voz' && l[2] === 'Endereza'); cierto(i >= 0, 'sin aviso');
+    return parseFloat(e.log.slice(0, i).reverse().find(l => l[1] === 'cifra' && /^\d+°$/.test(l[2]))[2]);
+  };
+  const sin = await cuando(0), con = await cuando(1000);
+  cierto(con > sin + 10, 'sin ' + sin + '° con ' + con + '°');
+});
+prueba('Pitidos por lado: girando a la derecha suenan por la derecha; con estéreo apagado, sin paneo', async () => {
+  const e = await caso({ voz: false }, sensorCoche(rampa(4, 20, 90)), 9000);
+  const pans = e.log.filter(l => l[1] === 'pan').map(l => l[2]);
+  cierto(pans.length > 0 && pans.every(p => p === 1), 'pans: ' + pans.slice(0, 5).join(','));
+  const e2 = await caso({ voz: false, estereo: false }, sensorCoche(rampa(4, 20, 90)), 9000);
+  igual(e2.log.filter(l => l[1] === 'pan').length, 0);
+});
+prueba('Pitidos por lado: girando a la izquierda suenan por la izquierda', async () => {
+  const e = await caso({ voz: false }, sensorCoche(rampa(4, 20, 90, 1)), 9000);
+  const pans = e.log.filter(l => l[1] === 'pan').map(l => l[2]);
+  cierto(pans.length > 0 && pans.every(p => p === -1), 'pans: ' + pans.slice(0, 5).join(','));
+});
+prueba('Diario: cada maniobra que llega a recto se apunta con su tipo y su exceso; borrar lo vacía', async () => {
+  const e = await caso({}, sensorCoche(t => t < 4 ? 0 : t < 9 ? -Math.min(95, (t - 4) * 20) : -Math.max(90, 95 - (t - 9) * 5)), 13000);
+  const d = JSON.parse(e.almacen['escuadra.diario']); igual(d.length, 1); cierto(d[0].tipo.startsWith('90°')); cierto(d[0].pasado >= 4, 'pasado ' + d[0].pasado);
+  e.el('abrirAjustes').click(); cierto(e.el('diarioResumen').textContent.startsWith('1 maniobras'));
+  e.el('borrarDiario').click(); igual(JSON.parse(e.almacen['escuadra.diario']).length, 0);
+});
+prueba('Comprobar sensores: el panel muestra los valores en vivo', async () => {
+  const e = await caso({}, sensorCoche(rampa(4, 20, 90)), 5000);
+  e.el('sensores').open = true; e.el('abrirSensores').click(); await e.avanzar(100);
+  const t = e.el('sensoresTexto').textContent;
+  cierto(t.includes('fuente: giro') && t.includes('orientación') && t.includes('giro:'), t.slice(0, 120));
+});
+prueba('La guía de Siri/CarPlay está en Ajustes', async () => { cierto(html.includes('Oye Siri, aparcar') && html.includes('Abrir URL')); });
 
 /* ───────── Resumen ───────── */
 ejecutar();

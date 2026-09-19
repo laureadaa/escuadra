@@ -119,6 +119,20 @@ aceleración respecto al sentido del giro. Supone que el móvil va de pie en el 
 pantalla hacia el conductor (o tumbado con la parte de arriba hacia delante). Mientras no lo
 detecta, usa el ajuste "Entro marcha atrás". Se muestra bajo el número grande ("Sentido").
 
+## Modo noche, sonido y diario
+
+- **Pantalla**: automático (oscuro de noche o si el móvil está en modo oscuro), claro u oscuro.
+- **Pitidos por el lado que toca**: suenan por el oído del lado hacia el que hay que girar y por los dos
+  cuando estás recto (con auriculares o el equipo del coche).
+- **Retardo Bluetooth**: si el sonido va por el equipo del coche llega con retraso; se elige cuánto
+  (0,3, 0,6 o 1 s) y la app adelanta el aviso de "endereza" ese tiempo.
+- **Diario de aparcamientos**: cada "recto" se apunta con el tipo de plaza, cuánto te pasaste y lo que
+  tardaste. Se ve en Ajustes y se puede borrar.
+- **Comprobar sensores**: en Ajustes, valores en vivo de orientación, aceleración, giro y sentido, con
+  botón de copiar, para diagnosticar sin adivinar.
+- **Abrirla sola en el coche**: en Ajustes, los tres pasos de la app Atajos del iPhone para que se abra
+  al conectar CarPlay o el Bluetooth del coche, y para decir "Oye Siri, aparcar".
+
 ## Ayudas para aparcar
 
 - **Voz**: "Endereza", "Recto", "Te has pasado". Para mirar atrás en vez de a la pantalla. Activada por

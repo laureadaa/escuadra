@@ -28,13 +28,26 @@
     --ambar: #D98C00;
     --verde: #2FB673;
     --estado: var(--rosa);
+    --tarjeta: rgba(255, 240, 246, .88);   /* tarjetas superpuestas */
+    --seleccion: #F7B8D0;                  /* opción elegida en Ajustes */
+    --cristal: #4A2238;
+    --vecino: #D9B4C4; --vecino-faro: #FFFFFF; --vecino-piloto: #C98A9C;
+    --sin: #D9A3BB;                        /* coche sin referencia */
+  }
+  /* Modo noche: fondos ciruela oscuros para no deslumbrar en el garaje */
+  [data-tema="oscuro"] {
+    --asfalto: #2B1B25; --asfalto-hondo: #1E1118; --asfalto-claro: #4A2F3F;
+    --pintura: #FFF1F6; --pintura-gastada: #C9A9B8; --rosa: #FF5C9E;
+    --tarjeta: rgba(43, 27, 37, .88); --seleccion: #5A2A44; --cristal: #1E1118;
+    --vecino: #6B5560; --vecino-faro: #9C8A93; --vecino-piloto: #8C4A55; --sin: #7A5A6A;
+    color-scheme: dark;
 
     /* Solo fuentes del sistema: nada que descargar, para que abra igual sin cobertura. */
     --fuente: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   }
   [data-zona="ok"]     { --estado: var(--verde); }
   [data-zona="pasado"] { --estado: var(--ambar); }
-  [data-zona="sin"]    { --estado: #D9A3BB; }
+  [data-zona="sin"]    { --estado: var(--sin); }
 
   * { box-sizing: border-box; margin: 0; }
 
@@ -55,6 +68,7 @@
   /* El dibujo ocupa casi toda la pantalla. El número y la frase van superpuestos sobre él
      (misma celda de la cuadrícula) y abajo queda una franja fina con el botón. */
   .app {
+    background: var(--asfalto); color: var(--pintura);
     height: 100dvh;
     display: grid;
     grid-template-rows: auto minmax(0, 1fr) auto;
@@ -80,6 +94,11 @@
     background: var(--asfalto-claro); font-weight: 600; font-size: .8rem;
   }
   .botones-cabecera { display: flex; gap: .5rem; flex-wrap: wrap; justify-content: flex-end; }
+  .pasos { padding-left: 1.25rem; display: grid; gap: .5rem; line-height: 1.4; }
+  .pasos li { padding-left: .25rem; }
+  .diario { padding-left: 1.25rem; display: grid; gap: .3rem; font-size: .875rem; }
+  .diario li span { color: var(--pintura-gastada); }
+  .sensores { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .8rem; white-space: pre-wrap; background: var(--asfalto-hondo); border-radius: .75rem; padding: .75rem; user-select: text; -webkit-user-select: text; }
   .maniobra { display: flex; gap: .5rem; justify-content: center; }
   .chip { padding: .35rem .8rem; border-radius: 999px; background: var(--asfalto-hondo); font-weight: 600; font-size: .85rem; }
   .chip[aria-pressed="true"] { background: var(--rosa); color: #fff; }
@@ -89,7 +108,7 @@
   .esfera { position: relative; grid-row: 2; grid-column: 1; }
   .tuto-texto {
     position: absolute; left: .75rem; right: .75rem; top: .75rem; display: none;
-    padding: .75rem 1rem; border-radius: 1rem; background: rgba(255, 255, 255, .92);
+    padding: .75rem 1rem; border-radius: 1rem; background: var(--tarjeta);
     color: var(--pintura); font-weight: 700; font-size: 1.125rem; text-align: center; text-wrap: balance;
     box-shadow: 0 4px 16px rgba(90, 42, 68, .18);
   }
@@ -113,19 +132,19 @@
   .camara video, .camara canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
   .camara-estado {
     position: absolute; left: 0; right: 0; top: 0; padding: .375rem .5rem; text-align: center;
-    font-weight: 800; font-size: 1.125rem; background: rgba(255, 240, 246, .82); min-height: 2.1em;
+    font-weight: 800; font-size: 1.125rem; background: var(--tarjeta); min-height: 2.1em;
   }
   .camara-estado[data-nivel="cerca"] { color: var(--ambar); }
   .camara-estado[data-nivel="muy"] { color: #FF6B6B; }
   .camara-aviso {
     position: absolute; left: 0; right: 0; bottom: 0; padding: .25rem .5rem; text-align: center;
-    font-size: .75rem; color: var(--pintura-gastada); background: rgba(255, 240, 246, .82);
+    font-size: .75rem; color: var(--pintura-gastada); background: var(--tarjeta);
   }
   .carril { fill: var(--asfalto-hondo); }
   .acera { fill: var(--asfalto-claro); }
   .bordillo { stroke: var(--pintura-gastada); stroke-width: 4; }
   .linea-plaza { stroke: var(--pintura); stroke-width: 8; stroke-linecap: butt; }
-  .vecino { --estado: #D9B4C4; --faro: #FFFFFF; --piloto: #C98A9C; }
+  .vecino { --estado: var(--vecino); --faro: var(--vecino-faro); --piloto: var(--vecino-piloto); }
   .fantasma { opacity: .35; }
   [data-zona="sin"] .fantasma { opacity: .22; }
   .trayecto { fill: none; stroke: var(--pintura-gastada); stroke-width: 3; stroke-dasharray: 6 10; opacity: .7; }
@@ -153,7 +172,7 @@
   .s-pausa { fill: none; stroke: #fff; stroke-width: 9; stroke-linecap: round; }
   [data-senal="volante"] .senal-svg, [data-senal="volante-atras"] .senal-svg { animation: latido 1.2s ease-in-out infinite; }
   .carroceria { fill: var(--estado); }
-  .cristal { fill: #4A2238; opacity: .6; }
+  .cristal { fill: var(--cristal); opacity: .6; }
   .faro { fill: var(--faro, #FFF7C2); }
   .piloto { fill: var(--piloto, #E5484D); }
   .retrovisor { fill: var(--estado); }
@@ -163,7 +182,7 @@
   .lectura {
     grid-row: 2; grid-column: 1; align-self: start; justify-self: start; z-index: 2;
     pointer-events: none; margin: .5rem; padding: .4rem .8rem .5rem; max-width: 70%;
-    background: rgba(255, 240, 246, .88); border-radius: 1rem; text-align: left;
+    background: var(--tarjeta); border-radius: 1rem; text-align: left;
     box-shadow: 0 2px 10px rgba(90, 42, 68, .12);
   }
   .frase { font-size: 1rem; font-weight: 600; color: var(--pintura-gastada); min-height: 1.3em; text-wrap: balance; }
@@ -244,6 +263,7 @@
   /* Ajustes */
   dialog {
     border: 0; padding: 0; color: var(--pintura); background: var(--asfalto);
+    color-scheme: inherit;
     border-radius: 1.25rem; width: min(30rem, calc(100vw - 1.5rem));
     max-height: calc(100dvh - 1.5rem); margin: auto; overflow: hidden;   /* solo hace scroll la hoja de dentro */
     user-select: text; -webkit-user-select: text;
@@ -261,7 +281,7 @@
   }
   .opciones label small { display: block; font-weight: 400; color: var(--pintura-gastada); font-size: .8125rem; }
   .opciones input { position: absolute; opacity: 0; pointer-events: none; }
-  .opciones label:has(input:checked) { border-color: var(--rosa); background: #F7B8D0; }
+  .opciones label:has(input:checked) { border-color: var(--rosa); background: var(--seleccion); }
   .interruptor {
     display: flex; align-items: center; justify-content: space-between; gap: 1rem;
     padding: .75rem .875rem; border-radius: .75rem; background: var(--asfalto-hondo); cursor: pointer;
@@ -281,7 +301,7 @@
 <main class="app" id="app" data-zona="sin">
 
   <header class="cabecera">
-    <div class="marca">Escuadra<span class="sensor" id="sensor"></span><span class="sensor" id="version">v14</span></div>
+    <div class="marca">Escuadra<span class="sensor" id="sensor"></span><span class="sensor" id="version">v15</span></div>
     <div class="botones-cabecera">
       <button class="btn-ajustes" id="abrirComo" type="button">Cómo se hace</button>
       <button class="btn-ajustes" id="abrirAjustes" type="button">Ajustes</button>
@@ -391,6 +411,16 @@
 </main>
 
 
+<dialog id="sensores" aria-labelledby="tituloSensores">
+  <form method="dialog" class="hoja">
+    <h2 id="tituloSensores">Sensores en vivo</h2>
+    <p class="ayuda">Pulsa "Estoy recto" antes si aún no están encendidos. Copia estos valores si tienes que contar un problema.</p>
+    <pre class="sensores" id="sensoresTexto">—</pre>
+    <div class="botones-cabecera"><button type="button" class="btn-ajustes" id="copiarSensores">Copiar</button></div>
+    <button class="btn-cerrar" value="cerrar">Cerrar</button>
+  </form>
+</dialog>
+
 <dialog id="ajustes" aria-labelledby="tituloAjustes">
   <form method="dialog" class="hoja">
     <h2 id="tituloAjustes">Ajustes</h2>
@@ -452,12 +482,56 @@
     </fieldset>
 
     <fieldset>
+      <legend>Pantalla</legend>
+      <div class="opciones">
+        <label><input type="radio" name="tema" value="auto">Automático<small>oscuro de noche</small></label>
+        <label><input type="radio" name="tema" value="claro">Claro</label>
+        <label><input type="radio" name="tema" value="oscuro">Oscuro</label>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Sonido</legend>
+      <label class="interruptor"><span>Pitidos por el lado que toca<small>Suenan por el oído del lado hacia el que hay que girar; por los dos cuando estás recto</small></span><input type="checkbox" id="optEstereo"></label>
+      <p class="ayuda">Si el sonido va por el equipo del coche (Bluetooth), llega con retraso. Elige cuánto y la app adelanta los avisos:</p>
+      <div class="opciones">
+        <label><input type="radio" name="retardo" value="0">Sin retardo<small>altavoz del móvil</small></label>
+        <label><input type="radio" name="retardo" value="300">0,3 s</label>
+        <label><input type="radio" name="retardo" value="600">0,6 s</label>
+        <label><input type="radio" name="retardo" value="1000">1 s</label>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Diario de aparcamientos</legend>
+      <p class="ayuda" id="diarioResumen"></p>
+      <ol class="diario" id="diarioLista"></ol>
+      <div class="interruptor"><span>Se guarda en este móvil</span><button type="button" class="btn-ajustes" id="borrarDiario">Borrar</button></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Comprobar sensores</legend>
+      <p class="ayuda">Valores en vivo para ver qué recibe la app. Útil si algo no cuadra.</p>
+      <button type="button" class="btn-ajustes" id="abrirSensores">Ver sensores</button>
+    </fieldset>
+
+    <fieldset>
+      <legend>Abrirla sola en el coche (iPhone)</legend>
+      <ol class="pasos">
+        <li>Abre la app <b>Atajos</b> del iPhone, pestaña <b>Automatización</b>, pulsa <b>+</b>.</li>
+        <li>Elige <b>CarPlay</b> (o <b>Bluetooth</b> y el equipo de tu coche) y "Al conectarse". Marca "Ejecutar inmediatamente".</li>
+        <li>Acción <b>Abrir URL</b> con la dirección de la Escuadra. Al arrancar el coche se abrirá sola en el móvil.</li>
+      </ol>
+      <p class="ayuda">Para voz: crea un atajo llamado "Aparcar" con la misma acción y di "Oye Siri, aparcar".</p>
+    </fieldset>
+
+    <fieldset>
       <legend>Pruebas</legend>
       <label class="interruptor"><span>Modo simulación<small>Para probar en el ordenador, sin sensores</small></span><input type="checkbox" id="optSim"></label>
     </fieldset>
 
     <button class="btn-cerrar" value="cerrar">Guardar y cerrar</button>
-    <p class="ayuda">Escuadra versión 14. Si en la cabecera pone otro número, recarga la app con internet.</p>
+    <p class="ayuda">Escuadra versión 15. Si en la cabecera pone otro número, recarga la app con internet.</p>
   </form>
 </dialog>
 
@@ -472,6 +546,7 @@
     sonido: true, voz: true, cantar: false, anticipar: true, aprender: true, aprendido: 0,
     camara: false, atras: false, detectarSentido: true, invertir: false, sim: false,
     salir: false,   // salir de la plaza en vez de entrar (batería y espiga)
+    tema: 'auto', estereo: true, retardo: 0,
     tamano: 'pequeno', coche: { largo: 3.0, ancho: 1.66, giro: 8.0 },
   };
   const cfg = Object.assign({}, porDefecto, leerAjustes());
@@ -542,6 +617,7 @@
     if (cfg.sim) return;
     const M = matrizOrientacion(e.alpha, e.beta, e.gamma);
     st.upDev = [M[2][0], M[2][1], M[2][2]];   // "arriba" en ejes del móvil, sin depender del acelerómetro
+    st.ultOri = [e.alpha, e.beta, e.gamma];
     const t = e.timeStamp;
 
     if (st.fase === 'calibrando' && st.cal) {
@@ -584,6 +660,8 @@
     if (dt < 0 || dt > 0.25) dt = 0;
 
     const g = [a.x, a.y, a.z];
+    st.ultAig = g; st.ultAcc = e.acceleration && e.acceleration.x != null ? [e.acceleration.x, e.acceleration.y, e.acceleration.z] : null;
+    st.ultRot = w && w.alpha != null ? [w.alpha, w.beta, w.gamma] : null;
     if (!st.Gm) st.Gm = g.slice();
     else { const k = 0.15; for (let i = 0; i < 3; i++) st.Gm[i] += (g[i] - st.Gm[i]) * k; }
     if (st.fase === 'calibrando' && st.cal) { st.cal.G = st.Gm.slice(); return; }
@@ -778,6 +856,7 @@
     st.giro = 0; st.giroAnterior = 0; st.tGiro = null; st.lado = 0; st.vel = 0; empezarEtapa(1);
     st.tManip = 0; st.tEstable = 0; st.mensajeMovil = false;
     st.sentido = 0; st.arranque = null; st.curva = null; st.tReposo = 0; st.vFwd = 0; st.vLento = 0; st.est = null;
+    st.minFalta = null; st.anotada = false; st.pasadoAnotado = 0; st.tReferencia = performance.now();
     st.entrada = saliendo() ? 1 : 0; st.fase = 'guiando'; st.zona = 'lejos';
     tono(660, 90); tono(990, 120, 0.11);
     decir('Vale, gira');
@@ -791,7 +870,7 @@
       if (audio.state === 'suspended') audio.resume();
     } catch { audio = null; }
   }
-  function tono(hz, ms, espera = 0, volumen = 0.22) {
+  function tono(hz, ms, espera = 0, volumen = 0.22, lado = 0) {
     if (!audio || !cfg.sonido) return;
     const t0 = audio.currentTime + espera, t1 = t0 + ms / 1000;
     const osc = audio.createOscillator(), gan = audio.createGain();
@@ -800,7 +879,11 @@
     gan.gain.linearRampToValueAtTime(volumen, t0 + 0.008);
     gan.gain.setValueAtTime(volumen, Math.max(t0 + 0.009, t1 - 0.02));
     gan.gain.linearRampToValueAtTime(0, t1);
-    osc.connect(gan).connect(audio.destination);
+    // Paneo: -1 izquierda, +1 derecha, 0 centro (si el navegador lo permite).
+    if (cfg.estereo !== false && lado && audio.createStereoPanner) {
+      const pan = audio.createStereoPanner(); pan.pan.value = Math.max(-1, Math.min(1, lado));
+      osc.connect(gan).connect(pan).connect(audio.destination);
+    } else osc.connect(gan).connect(audio.destination);
     osc.start(t0); osc.stop(t1 + 0.03);
   }
   function decir(texto) {
@@ -829,6 +912,35 @@
   const ANGULO_LINEA = 45;
 
   function objetivoEtapa() { return cfg.linea ? ANGULO_LINEA : cfg.objetivo; }
+
+  /* ───────────── Diario de aparcamientos ───────────── */
+  const CLAVE_DIARIO = 'escuadra.diario';
+  function leerDiario() { try { return JSON.parse(localStorage.getItem(CLAVE_DIARIO) || '[]'); } catch { return []; } }
+  function guardarDiario(d) { try { localStorage.setItem(CLAVE_DIARIO, JSON.stringify(d.slice(-50))); } catch { /* sin almacenamiento */ } }
+  function anotarManiobra(ahora) {
+    const d = leerDiario();
+    const tipo = cfg.linea ? 'En línea' : `${cfg.objetivo}° ${saliendo() ? 'salida' : entraAtras() ? 'marcha atrás' : 'de frente'}`;
+    d.push({ fecha: Date.now(), tipo, pasado: Math.round(Math.max(0, -(st.minFalta == null ? 0 : st.minFalta))), segundos: Math.round((ahora - (st.tReferencia || ahora)) / 1000) });
+    guardarDiario(d);
+  }
+  function actualizarAnotacion() {
+    const d = leerDiario(); if (!d.length) return;
+    st.pasadoAnotado = Math.round(Math.max(0, -st.minFalta));
+    d[d.length - 1].pasado = st.pasadoAnotado;
+    guardarDiario(d);
+  }
+  function pintarDiario() {
+    const d = leerDiario().slice().reverse();
+    const ol = $('diarioLista'); ol.textContent = '';
+    $('diarioResumen').textContent = d.length ? `${d.length} maniobras. Media de exceso: ${(d.reduce((s, x) => s + x.pasado, 0) / d.length).toFixed(1)}°.` : 'Aún no hay maniobras. Cada "recto" se apunta aquí.';
+    for (const x of d.slice(0, 10)) {
+      const li = document.createElement('li');
+      const f = new Date(x.fecha);
+      li.textContent = `${x.tipo} · ${x.pasado ? 'te pasaste ' + x.pasado + '°' : 'sin pasarte'} · ${x.segundos} s `;
+      const s = document.createElement('span'); s.textContent = `${f.getDate()}/${f.getMonth() + 1} ${String(f.getHours()).padStart(2, '0')}:${String(f.getMinutes()).padStart(2, '0')}`;
+      li.appendChild(s); ol.appendChild(li);
+    }
+  }
 
   function empezarEtapa(n) {
     st.etapa = n; st.maxAvance = 0; st.entrada2 = 0;
@@ -882,7 +994,11 @@
     else if (falta < 0) z = 'pasado';
     else z = falta <= 45 ? 'cerca' : 'lejos';
 
+    st.minFalta = st.minFalta == null ? falta : Math.min(st.minFalta, falta);
+    // Si ya está apuntada la maniobra y luego te pasas más, se actualiza el exceso en el diario.
+    if (st.anotada && st.minFalta < -(st.pasadoAnotado || 0)) actualizarAnotacion();
     if (z !== antes) {
+      if (z === 'ok' && !(cfg.linea && st.etapa === 1) && !st.anotada && st.fuente !== 'sim') { st.anotada = true; anotarManiobra(performance.now()); }
       if (z === 'ok') {
         tono(784, 110); tono(1175, 260, 0.12); vibrar([60, 40, 120]);
         decir(cfg.linea && st.etapa === 1 ? 'Volante al otro lado' : 'Recto');
@@ -897,10 +1013,10 @@
     if (st.fase !== 'guiando' || ahora < st.proximoPitido) return;
     if (st.zona === 'cerca') {
       const f = Math.min(1, Math.max(0, (falta - cfg.tolerancia) / (45 - cfg.tolerancia)));
-      tono(880, 55);
+      tono(880, 55, 0, 0.22, st.ladoPitido || 0);
       st.proximoPitido = ahora + 130 + f * 720;
     } else if (st.zona === 'pasado') {
-      tono(300, 90); tono(300, 90, 0.16);
+      tono(300, 90, 0, 0.22, st.ladoPitido || 0); tono(300, 90, 0.16, 0.22, st.ladoPitido || 0);
       st.proximoPitido = ahora + 850;
     }
   }
@@ -926,7 +1042,8 @@
   function avisarEndereza(falta, v, ahora) {
     if (st.fase !== 'guiando' || !cfg.anticipar) return;
     const aprendido = cfg.aprender ? cfg.aprendido : 0;
-    const margen = Math.max(0, v) * REACCION + aprendido;
+    // Con el sonido por Bluetooth el aviso llega tarde: se adelanta lo que tarde en llegar.
+    const margen = Math.max(0, v) * (REACCION + (cfg.retardo || 0) / 1000) + aprendido;
 
     if (st.enderezaAvisado) {
       // Se rearma si el conductor paró de girar antes de llegar: hará falta otro aviso.
@@ -996,6 +1113,35 @@
     cantarGrados(falta);
 
     poner(app, 'data-zona', st.zona);
+    // Tema: automático según la hora y el modo oscuro del móvil, o el elegido.
+    if (!st.tTema || ahora - st.tTema > 1000) {
+      st.tTema = ahora;
+      let tema = cfg.tema || 'auto';
+      if (tema === 'auto') {
+        const hh = new Date().getHours();
+        const sistemaOscuro = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        tema = sistemaOscuro || hh >= 20 || hh < 7 ? 'oscuro' : 'claro';
+      }
+      poner(app, 'data-tema', tema);
+      const meta = document.querySelector && document.querySelector('meta[name="theme-color"]');
+      if (meta) meta.setAttribute('content', tema === 'oscuro' ? '#2B1B25' : '#FFE9F0');
+    }
+    // Panel de sensores en vivo (si está abierto)
+    if ($('sensores').open) {
+      const f3 = v => v == null ? '—' : Array.isArray(v) ? v.map(x => (x == null ? '—' : (+x).toFixed(2))).join('  ') : (+v).toFixed(2);
+      poner($('sensoresTexto'), 'text', [
+        'fuente: ' + (st.fuente || 'ninguna') + '   fase: ' + st.fase + '   versión: ' + $('version').textContent,
+        'orientación (alfa beta gamma): ' + f3(st.ultOri),
+        'aceleración con gravedad:      ' + f3(st.ultAig),
+        'aceleración sin gravedad:      ' + f3(st.ultAcc),
+        'velocidad angular (rotationRate): ' + f3(st.ultRot),
+        'arriba en ejes del móvil:      ' + f3(st.upDev),
+        'signos: aIG ' + (st.sg || '?') + '  acc ' + (st.sgAcc || '?'),
+        'giro: ' + f3(st.giro) + '°   vel: ' + f3(st.vel) + '°/s   eje: ' + (st.eje == null ? '—' : 'xyz'[st.eje]) + '   rumboRef: ' + f3(st.rumboRef),
+        'sentido: ' + (st.sentido || 0) + '   ' + (st.debugSentido || '') + '   vLento: ' + f3(st.vLento) + '   vibra: ' + f3(st.vibra),
+        'lado: ' + st.lado + '   zona: ' + st.zona + '   etapa: ' + st.etapa,
+      ].join('\n'));
+    }
     poner(app, 'data-linea', cfg.linea ? '1' : '0');
     poner($('chipEntrar'), 'aria-pressed', cfg.salir ? 'false' : 'true');
     poner($('chipSalir'), 'aria-pressed', cfg.salir ? 'true' : 'false');
@@ -1023,6 +1169,8 @@
       poner(app, 'data-senal', senal);
       poner($('senalTexto'), 'text', texto);
       poner($('senalG'), 'transform', ladoSenal ? 'scale(1 1)' : 'scale(-1 1)');
+      // Lado por el que suenan los pitidos: hacia donde hay que girar; centro si no hay que girar.
+      st.ladoPitido = senal === 'volante' || senal === 'volante-atras' ? (ladoSenal ? 1 : -1) : 0;
       // Movimiento real hacia delante o atrás (velocidad estimada por el acelerómetro).
       const mov = (st.fase === 'guiando' || st.fase === 'lista') && st.fuente !== 'sim' ? (st.vFwd || 0) : 0;
       const dirMov = mov > 0.25 ? 'adelante' : mov < -0.25 ? 'atras' : '';
@@ -1496,6 +1644,10 @@
     $('optSentido').checked = cfg.detectarSentido;
     dlg.querySelectorAll('[name=cochePreset]').forEach(r => r.checked = r.value === (cfg.tamano || 'pequeno'));
     $('optSim').checked = cfg.sim;
+    dlg.querySelectorAll('[name=tema]').forEach(r => r.checked = r.value === (cfg.tema || 'auto'));
+    dlg.querySelectorAll('[name=retardo]').forEach(r => r.checked = +r.value === (cfg.retardo || 0));
+    $('optEstereo').checked = cfg.estereo !== false;
+    pintarDiario();
   }
   $('abrirAjustes').addEventListener('click', () => { sincronizarAjustes(); dlg.showModal(); });
   // Tamaños de coche: largo, ancho y diámetro de giro entre bordillos (m).
@@ -1553,6 +1705,12 @@
     return null;
   }
   $('abrirComo').addEventListener('click', () => { iniciarAudio(); empezarTutorial(); });
+  $('abrirSensores').addEventListener('click', () => { $('sensores').showModal(); });
+  $('copiarSensores').addEventListener('click', () => {
+    const t = $('sensoresTexto').textContent;
+    try { navigator.clipboard.writeText(t); $('copiarSensores').textContent = 'Copiado'; setTimeout(() => { $('copiarSensores').textContent = 'Copiar'; }, 1500); } catch { /* sin portapapeles */ }
+  });
+  $('borrarDiario').addEventListener('click', () => { guardarDiario([]); pintarDiario(); });
   for (const [id, valor] of [['chipEntrar', false], ['chipSalir', true]]) $(id).addEventListener('click', () => {
     if (cfg.salir === valor) return;
     cfg.salir = valor; guardarAjustes(); st.tuto = null;
@@ -1577,6 +1735,9 @@
     cfg.tamano = (dlg.querySelector('[name=cochePreset]:checked') || { value: 'pequeno' }).value;
     cfg.coche = COCHES[cfg.tamano] || COCHES.pequeno;
     cfg.sim    = $('optSim').checked;
+    cfg.tema = (dlg.querySelector('[name=tema]:checked') || { value: 'auto' }).value;
+    cfg.retardo = +(dlg.querySelector('[name=retardo]:checked') || { value: 0 }).value;
+    cfg.estereo = $('optEstereo').checked;
     guardarAjustes(); iniciarAudio();
 
     // La cámara solo se enciende con los sensores ya activados (así el permiso llega tras un toque).
