@@ -131,6 +131,29 @@
   .trayecto { fill: none; stroke: var(--pintura-gastada); stroke-width: 3; stroke-dasharray: 6 10; opacity: .7; }
   .nota-escena { position: absolute; left: 0; right: 0; bottom: .2rem; text-align: center; font-size: .65rem; color: var(--pintura-gastada); opacity: .8; pointer-events: none; }
   [data-tuto="1"] .lectura { display: none; }
+  .flecha-mov { fill: var(--rosa); opacity: 0; transition: opacity .3s; }
+  [data-mov="adelante"] .flecha-mov, [data-mov="atras"] .flecha-mov { opacity: .9; animation: latido 1s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+  @keyframes fluir { to { stroke-dashoffset: -32; } }
+  [data-mov="adelante"] .trayecto { animation: fluir 1s linear infinite; }
+  [data-mov="atras"] .trayecto { animation: fluir 1s linear infinite reverse; }
+  /* Señales */
+  .senal { display: none; align-items: center; gap: .6rem; margin-top: .35rem; pointer-events: none; }
+  [data-senal]:not([data-senal=""]) .senal { display: flex; }
+  .senal-svg { width: 3.2rem; height: 3.2rem; flex: none; }
+  .senal-texto { font-size: .9rem; font-weight: 700; color: var(--pintura); text-wrap: balance; }
+  .s-volante, .s-atras, .s-endereza, .s-recto, .s-quieto { display: none; }
+  [data-senal="volante"] .s-volante, [data-senal="volante-atras"] .s-volante, [data-senal="volante-atras"] .s-atras,
+  [data-senal="endereza"] .s-endereza, [data-senal="recto"] .s-recto, [data-senal="quieto"] .s-quieto { display: block; }
+  .s-aro { fill: none; stroke: var(--pintura); stroke-width: 7; }
+  .s-buje { fill: var(--pintura); }
+  .s-radio { fill: none; stroke: var(--pintura); stroke-width: 6; stroke-linecap: round; }
+  .s-flecha { fill: none; stroke: var(--rosa); stroke-width: 8; stroke-linecap: round; }
+  .s-punta { fill: var(--rosa); }
+  .s-ok { fill: var(--verde); }
+  .s-tick { fill: none; stroke: #fff; stroke-width: 10; stroke-linecap: round; stroke-linejoin: round; }
+  .s-stop { fill: var(--ambar); }
+  .s-pausa { fill: none; stroke: #fff; stroke-width: 9; stroke-linecap: round; }
+  [data-senal="volante"] .senal-svg, [data-senal="volante-atras"] .senal-svg { animation: latido 1.2s ease-in-out infinite; }
   .carroceria { fill: var(--estado); }
   .cristal { fill: #4A2238; opacity: .6; }
   .faro { fill: var(--faro, #FFF7C2); }
@@ -156,11 +179,12 @@
   }
   [data-zona="sin"] .cifra { color: var(--pintura-gastada); }
   .datos {
-    display: none; justify-content: flex-start; gap: .75rem; flex-wrap: wrap;   /* solo en apaisado */
+    display: flex; justify-content: flex-start; gap: .75rem; flex-wrap: wrap;
     margin-top: .2rem; font-size: .7rem; color: var(--pintura-gastada);
     font-variant-numeric: tabular-nums;
   }
   .datos b { color: var(--pintura); font-weight: 600; }
+  .datos span:not(:last-child) { display: none; }   /* en vertical solo el sentido; en apaisado, todo */
 
   /* Acciones */
   .acciones { display: grid; gap: .4rem; }
@@ -202,7 +226,11 @@
       margin: 0; background: none; box-shadow: none; text-align: center; pointer-events: auto;
     }
     .lectura { align-self: start; }
-    .datos { display: flex; justify-content: center; }
+    .datos { justify-content: center; }
+    .datos span { display: inline; }
+    .senal { flex-direction: column; margin-top: 1rem; gap: .4rem; }
+    .senal-svg { width: min(9rem, 26vh); height: min(9rem, 26vh); }
+    .senal-texto { font-size: 1.15rem; text-align: center; }
     .cifra { font-size: clamp(3rem, min(9vw, 28vh), 8rem); }
     .acciones { grid-row: 3; grid-column: 2; max-height: 58vh; overflow-y: auto; }
   }
@@ -255,7 +283,7 @@
 <main class="app" id="app" data-zona="sin">
 
   <header class="cabecera">
-    <div class="marca">Escuadra<span class="sensor" id="sensor"></span><span class="sensor" id="version">v11</span></div>
+    <div class="marca">Escuadra<span class="sensor" id="sensor"></span><span class="sensor" id="version">v12</span></div>
     <div class="botones-cabecera">
       <button class="btn-ajustes" id="abrirComo" type="button">Cómo se hace</button>
       <button class="btn-ajustes" id="abrirAjustes" type="button">Ajustes</button>
@@ -298,6 +326,8 @@
         <use href="#formaCoche" class="coche" id="coche"/>
         <circle class="hombro" cx="-30" cy="-5" r="9"/>
       </g>
+      <!-- Flecha que indica hacia dónde se mueve el coche (lo nota el acelerómetro) -->
+      <g id="flechaMov"><polygon class="flecha-mov" points="0,-30 -20,0 -8,0 -8,18 8,18 8,0 20,0"/></g>
     </svg>
     <p class="tuto-texto" id="tutoTexto"></p>
     <p class="nota-escena">Dibujo orientativo. Solo el ángulo es real.</p>
@@ -310,6 +340,40 @@
       <span>Girado <b id="girado">0°</b></span>
       <span>Velocidad de giro <b id="velocidad">0°/s</b></span>
       <span>Sentido <b id="sentido">—</b></span>
+    </div>
+    <!-- Señal visual de la indicación en curso (acompaña a la voz) -->
+    <div class="senal" id="senal">
+      <svg class="senal-svg" viewBox="-60 -60 120 120" aria-hidden="true">
+        <g id="senalG">
+          <g class="s-volante">
+            <circle class="s-aro" r="34"/>
+            <circle class="s-buje" r="8"/>
+            <path class="s-radio" d="M0,-8 V-34 M-7,4 L-30,17 M7,4 L30,17"/>
+            <path class="s-flecha" d="M-42,-28 A52,52 0 0 1 42,-28"/>
+            <polygon class="s-punta" points="0,0 -16,-2 -6,12" transform="translate(44 -26) rotate(28)"/>
+          </g>
+          <g class="s-atras">
+            <path class="s-flecha" d="M-44,10 V44"/>
+            <polygon class="s-punta" points="0,0 -9,-13 9,-13" transform="translate(-44 50)"/>
+          </g>
+          <g class="s-endereza">
+            <circle class="s-aro" r="34"/>
+            <circle class="s-buje" r="8"/>
+            <path class="s-radio" d="M0,-8 V-34 M-7,4 L-30,17 M7,4 L30,17"/>
+            <path class="s-flecha" d="M0,-42 V-58"/>
+            <polygon class="s-punta" points="0,0 -9,13 9,13" transform="translate(0 -58)"/>
+          </g>
+          <g class="s-recto">
+            <circle class="s-ok" r="44"/>
+            <path class="s-tick" d="M-22,2 L-6,18 L24,-16"/>
+          </g>
+          <g class="s-quieto">
+            <polygon class="s-stop" points="-20,-46 20,-46 46,-20 46,20 20,46 -20,46 -46,20 -46,-20"/>
+            <path class="s-pausa" d="M-10,-18 V18 M10,-18 V18"/>
+          </g>
+        </g>
+      </svg>
+      <p class="senal-texto" id="senalTexto"></p>
     </div>
   </section>
 
@@ -396,7 +460,7 @@
     </fieldset>
 
     <button class="btn-cerrar" value="cerrar">Guardar y cerrar</button>
-    <p class="ayuda">Escuadra versión 11. Si en la cabecera pone otro número, recarga la app con internet.</p>
+    <p class="ayuda">Escuadra versión 12. Si en la cabecera pone otro número, recarga la app con internet.</p>
   </form>
 </dialog>
 
@@ -926,6 +990,37 @@
     poner(app, 'data-linea', cfg.linea ? '1' : '0');
     poner($('chipEntrar'), 'aria-pressed', cfg.salir ? 'false' : 'true');
     poner($('chipSalir'), 'aria-pressed', cfg.salir ? 'true' : 'false');
+    {
+      // Señal visual de la indicación: volante hacia el lado que toca, endereza, marcha atrás, recto o quieto.
+      const dcha = st.lado === 0 ? true : ((cfg.linea || entraAtras()) !== saliendo() ? st.lado === 1 : st.lado === -1);
+      const L = d => d ? 'derecha' : 'izquierda';
+      let senal = '', texto = '', ladoSenal = true;
+      if (st.fase === 'calibrando') { senal = 'quieto'; texto = 'Quieto, dos segundos'; }
+      else if ((st.fase === 'guiando') && cfg.linea) {
+        if (st.etapa === 1) {
+          if (st.zona === 'ok' || st.zona === 'pasado' || st.enderezaAvisado) { senal = 'volante'; ladoSenal = !dcha; texto = 'Volante a tope al otro lado: ' + L(!dcha); }
+          else { senal = 'volante-atras'; ladoSenal = dcha; texto = 'Marcha atrás, volante a tope a la ' + L(dcha); }
+        } else if (st.zona === 'ok') { senal = 'recto'; texto = 'Recto. Volante derecho y centra'; }
+        else if (st.zona === 'pasado') { senal = 'volante'; ladoSenal = dcha; texto = 'Te has pasado: un poco a la ' + L(dcha); }
+        else if (st.enderezaAvisado) { senal = 'endereza'; texto = 'Endereza el volante'; }
+        else { senal = 'volante-atras'; ladoSenal = !dcha; texto = 'Sigue marcha atrás con el volante a la ' + L(!dcha); }
+      } else if ((st.fase === 'guiando')) {
+        const atrasMov = saliendo() ? !entraAtras() : entraAtras();
+        if (st.zona === 'ok') { senal = 'recto'; texto = saliendo() ? 'Recto: ya estás en el pasillo' : 'Recto: entra derecho'; }
+        else if (st.zona === 'pasado') { senal = 'volante'; ladoSenal = !dcha; texto = 'Te has pasado: un poco a la ' + L(!dcha); }
+        else if (st.enderezaAvisado) { senal = 'endereza'; texto = 'Endereza el volante'; }
+        else { senal = atrasMov ? 'volante-atras' : 'volante'; ladoSenal = dcha; texto = (atrasMov ? 'Marcha atrás, volante' : 'Volante') + ' a tope a la ' + L(dcha); }
+      }
+      poner(app, 'data-senal', senal);
+      poner($('senalTexto'), 'text', texto);
+      poner($('senalG'), 'transform', ladoSenal ? 'scale(1 1)' : 'scale(-1 1)');
+      // Movimiento real hacia delante o atrás (velocidad estimada por el acelerómetro).
+      const mov = st.fase === 'guiando' && st.fuente !== 'sim' ? (st.vFwd || 0) : 0;
+      const dirMov = mov > 0.25 ? 'adelante' : mov < -0.25 ? 'atras' : '';
+      poner(app, 'data-mov', dirMov);
+      const d = dimCoche();
+      poner($('flechaMov'), 'transform', dirMov === 'atras' ? `translate(0 ${(104 * d.sy + 40).toFixed(0)}) rotate(180)` : `translate(0 ${(-104 * d.sy - 40).toFixed(0)})`);
+    }
     poner(sensor, 'text', st.fuente ? FUENTES[st.fuente] : '');
 
     // Dibujo: tu coche fijo en el centro mirando hacia arriba y la escena moviéndose alrededor.
