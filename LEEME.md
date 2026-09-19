@@ -10,7 +10,7 @@ Solo mide el ángulo. No detecta distancias, bordillos, coches ni personas.
 1. Abre esta carpeta en VS Code: Archivo > Abrir carpeta.
 2. Instala la extensión **Live Server** (Ritwick Dey).
 3. Clic derecho sobre `index.html` > **Open with Live Server**. Se abre en `http://localhost:5500`.
-4. Un ordenador no tiene giroscopio: pulsa **Activar sensores** y luego **Probar con simulación**.
+4. Un ordenador no tiene giroscopio: pulsa **Estoy recto** y luego **Probar con simulación**.
    Mueve el deslizador o pulsa **Ver maniobra de ejemplo**.
 
 Con Chrome también puedes fingir un móvil que gira: F12 > menú ⋮ > More tools > **Sensors** > Orientation.
@@ -74,12 +74,11 @@ otro lado, la escena se pone en espejo sola.
 En batería y espiga el giro termina en la boca de la plaza y el último tramo se hace recto: cuando
 la app dice "recto", el dibujo mete el coche derecho en su sitio.
 
-**Es orientativo.** Lo único medido es el ángulo. La posición sale de las medidas del coche que
-pongas en Ajustes > **Mi coche** (largo, ancho y diámetro de giro entre bordillos, de la ficha
-técnica; por defecto un Smart Fortwo) suponiendo el volante a tope. Con esas medidas la
-trayectoria, el punto de parada y el tramo recto final son los de tu coche. Girando el volante
-menos, la trayectoria real cambia. No mires el dibujo para saber a qué distancia estás de nada:
-mira el coche.
+**Es orientativo.** Lo único medido es el ángulo. La posición sale del tamaño de coche elegido en
+Ajustes > **Mi coche** (pequeño, mediano o grande; por defecto pequeño, tipo Smart) suponiendo el
+volante a tope. Con ese tamaño se calculan la trayectoria, el punto de parada y el tramo recto
+final. Girando el volante menos, la trayectoria real cambia. No mires el dibujo para saber a qué
+distancia estás de nada: mira el coche.
 
 Con "Entro marcha atrás" el coche entra de culo y las plazas se dibujan en consecuencia. En línea
 la escena es una calle con acera, dos coches aparcados y el hueco entre ellos.
