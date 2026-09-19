@@ -283,7 +283,7 @@
 <main class="app" id="app" data-zona="sin">
 
   <header class="cabecera">
-    <div class="marca">Escuadra<span class="sensor" id="sensor"></span><span class="sensor" id="version">v12</span></div>
+    <div class="marca">Escuadra<span class="sensor" id="sensor"></span><span class="sensor" id="version">v13</span></div>
     <div class="botones-cabecera">
       <button class="btn-ajustes" id="abrirComo" type="button">Cómo se hace</button>
       <button class="btn-ajustes" id="abrirAjustes" type="button">Ajustes</button>
@@ -460,7 +460,7 @@
     </fieldset>
 
     <button class="btn-cerrar" value="cerrar">Guardar y cerrar</button>
-    <p class="ayuda">Escuadra versión 12. Si en la cabecera pone otro número, recarga la app con internet.</p>
+    <p class="ayuda">Escuadra versión 13. Si en la cabecera pone otro número, recarga la app con internet.</p>
   </form>
 </dialog>
 
@@ -590,14 +590,15 @@
     if (!st.Gm) st.Gm = g.slice();
     else { const k = 0.15; for (let i = 0; i < 3; i++) st.Gm[i] += (g[i] - st.Gm[i]) * k; }
     if (st.fase === 'calibrando' && st.cal) { st.cal.G = st.Gm.slice(); return; }
-    if (st.fase !== 'guiando' || !st.G) return;
+    if ((st.fase !== 'guiando' && st.fase !== 'lista') || !(st.G || st.Gm)) return;
+    const Gref = st.G || st.Gm;   // gravedad calibrada o, antes de la maniobra, la filtrada
 
     // Un coche aparcando gira sobre la vertical con la gravedad quieta y sin tirones. Si el
     // móvil se inclina respecto a la postura calibrada o recibe sacudidas, casi seguro que lo
     // han cogido con la mano: se avisa (sin parar la medida: un bache también podría dispararlo).
-    const n = Math.hypot(st.G[0], st.G[1], st.G[2]) || 1, nm = Math.hypot(st.Gm[0], st.Gm[1], st.Gm[2]) || 1;
-    const cosInc = (st.Gm[0] * st.G[0] + st.Gm[1] * st.G[1] + st.Gm[2] * st.G[2]) / (nm * n);
-    const inclinado = cosInc < Math.cos(12 * Math.PI / 180);
+    const n = Math.hypot(Gref[0], Gref[1], Gref[2]) || 1, nm = Math.hypot(st.Gm[0], st.Gm[1], st.Gm[2]) || 1;
+    const cosInc = (st.Gm[0] * Gref[0] + st.Gm[1] * Gref[1] + st.Gm[2] * Gref[2]) / (nm * n);
+    const inclinado = st.fase === 'guiando' && cosInc < Math.cos(12 * Math.PI / 180);
     const sacudido = Math.abs(Math.hypot(g[0], g[1], g[2]) - n) > 3;
     st.tManip = inclinado || sacudido ? (st.tManip || 0) + dt : 0;
     if (st.tManip > 0.4 && !st.mensajeMovil) {
@@ -619,11 +620,11 @@
       // Signo del acelerómetro: según la especificación, en reposo mide +g hacia arriba, pero
       // iOS lo da al revés. En vez de suponerlo, se compara la gravedad medida con el "arriba"
       // que da la orientación del sistema, que no depende del acelerómetro.
-      const upO = st.upDev || [st.G[0] / n, st.G[1] / n, st.G[2] / n];
-      const dot = st.G[0] * upO[0] + st.G[1] * upO[1] + st.G[2] * upO[2];
+      const upO = st.upDev || [Gref[0] / n, Gref[1] / n, Gref[2] / n];
+      const dot = Gref[0] * upO[0] + Gref[1] * upO[1] + Gref[2] * upO[2];
       if (Math.abs(dot) > 0.3 * n) st.sg = dot > 0 ? 1 : -1;
       const sg = st.sg || (ES_IOS ? -1 : 1);
-      const up = st.upDev ? st.upDev.slice() : [st.G[0] * sg / n, st.G[1] * sg / n, st.G[2] * sg / n];
+      const up = st.upDev ? st.upDev.slice() : [Gref[0] * sg / n, Gref[1] * sg / n, Gref[2] * sg / n];
       // Aceleración sin gravedad: mejor la que calcula el sistema (quita la gravedad con el
       // giroscopio, así inclinar el móvil no se cuela como aceleración). Si no la da, se usa la
       // gravedad calibrada. Su signo se comprueba: aIG - acc tiene que ser la gravedad, hacia arriba.
@@ -636,7 +637,7 @@
         const s2 = st.sgAcc || sg;
         lin = [acc.x * s2, acc.y * s2, acc.z * s2];
       } else {
-        lin = [(g[0] - st.G[0]) * sg, (g[1] - st.G[1]) * sg, (g[2] - st.G[2]) * sg];
+        lin = [(g[0] - Gref[0]) * sg, (g[1] - Gref[1]) * sg, (g[2] - Gref[2]) * sg];
       }
       const horiz = v => { const p = v[0] * up[0] + v[1] * up[1] + v[2] * up[2]; return [v[0] - p * up[0], v[1] - p * up[1], v[2] - p * up[2]]; };
       const hz = horiz([0, 0, 1]), hy = horiz([0, 1, 0]);
@@ -667,7 +668,13 @@
       st.debugSentido = `a ${aFwd >= 0 ? '+' : ''}${aFwd.toFixed(1)} v ${st.vFwd >= 0 ? '+' : ''}${st.vFwd.toFixed(2)}`;
     }
   }
-  function fijarSentido(s) { st.sentido = s; }
+  function fijarSentido(s) {
+    if (s !== st.sentido) {
+      const t = performance.now();
+      if (!st.tVozSentido || t - st.tVozSentido > 3000) { decir(s > 0 ? 'Adelante' : 'Marcha atrás'); st.tVozSentido = t; }
+    }
+    st.sentido = s;
+  }
 
   // ¿Entra marcha atrás? En línea siempre. En batería/espiga, lo que detecte el acelerómetro
   // durante la maniobra y, mientras no se sepa, el ajuste "Entro marcha atrás".
@@ -1015,7 +1022,7 @@
       poner($('senalTexto'), 'text', texto);
       poner($('senalG'), 'transform', ladoSenal ? 'scale(1 1)' : 'scale(-1 1)');
       // Movimiento real hacia delante o atrás (velocidad estimada por el acelerómetro).
-      const mov = st.fase === 'guiando' && st.fuente !== 'sim' ? (st.vFwd || 0) : 0;
+      const mov = (st.fase === 'guiando' || st.fase === 'lista') && st.fuente !== 'sim' ? (st.vFwd || 0) : 0;
       const dirMov = mov > 0.25 ? 'adelante' : mov < -0.25 ? 'atras' : '';
       poner(app, 'data-mov', dirMov);
       const d = dimCoche();
@@ -1044,10 +1051,18 @@
     // (En línea, el mismo contador anima el tramo recto a 45° mientras estás en los 45°.)
     // En batería: entrar recto hasta el fondo. En línea, etapa 1: tramo recto a 45°; etapa 2:
     // avanzar hasta centrarse. Cada etapa lleva su contador.
+    // Los tramos rectos avanzan con el movimiento real que estima el acelerómetro (velocidad hacia
+    // delante en m/s, con signo); en simulación o si no hay estimación, con una animación fija.
     const entrando = guiando && st.zona === 'ok';
-    if (saliendo()) st.entrada = guiando ? Math.max(0, (st.entrada == null ? 1 : st.entrada) - dtFrame * 0.4) : 1;   // primero sale recto
-    else if (cfg.linea && guiando && st.etapa === 2) st.entrada2 = Math.max(0, Math.min(1, (st.entrada2 || 0) + dtFrame * (entrando ? 0.45 : -1.5)));
-    else st.entrada = Math.max(0, Math.min(1, (st.entrada || 0) + dtFrame * (entrando ? 0.45 : -1.5)));
+    const conSensor = st.fuente !== 'sim' && st.vFwd != null;
+    const Dm = dimCoche();
+    const largoRecto = (cfg.linea ? Math.hypot(...suma(geometria().rearF, geometria().rearE, -1)) : (entraAtras() ? Dm.RECTA_ATRAS : Dm.RECTA_FRENTE)) / U;   // metros
+    const atrasMov = cfg.linea ? (st.etapa === 2 ? false : true) : (saliendo() ? !entraAtras() : entraAtras());
+    // avance real a lo largo del tramo, en fracción por segundo (positivo si se mueve en el sentido esperado)
+    const paso = conSensor ? (atrasMov ? -1 : 1) * (st.vFwd || 0) / Math.max(1, largoRecto) : (entrando ? 0.45 : -1.5);
+    if (saliendo()) st.entrada = guiando ? Math.max(0, Math.min(1, (st.entrada == null ? 1 : st.entrada) - dtFrame * (conSensor ? Math.max(0, paso) : 0.4))) : 1;   // primero sale recto
+    else if (cfg.linea && guiando && st.etapa === 2) st.entrada2 = Math.max(0, Math.min(1, (st.entrada2 || 0) + dtFrame * (conSensor ? (entrando ? Math.max(0, -paso) : -1.5) : paso)));
+    else st.entrada = Math.max(0, Math.min(1, (st.entrada || 0) + dtFrame * (conSensor ? (entrando ? Math.max(0, paso) : -1.5) : paso)));
     // Tutorial animado: manda sobre la medida mientras dura.
     let q = null, tutoTexto = '', refs = '0';
     if (st.tuto) {
@@ -1067,6 +1082,11 @@
     // Centro del coche en el mundo; la vista lo lleva al origen con el rumbo hacia arriba.
     let c = suma(q.p, detras(q.h), -dimCoche().EJE), h = q.h;
     if (!plazaDerecha) { c = [-c[0], c[1]]; h = -h; }
+    // Pequeño desplazamiento del coche en el sentido en que se mueve (lo nota el acelerómetro),
+    // para que se vea que avanza o retrocede aunque la posición real no se pueda medir.
+    const vMov = st.fuente !== 'sim' && (st.fase === 'guiando' || st.fase === 'lista') ? Math.max(-1, Math.min(1, st.vFwd || 0)) : 0;
+    st.despMov = (st.despMov || 0) + (vMov * 40 - (st.despMov || 0)) * 0.1;
+    c = suma(c, detras(h), -st.despMov);
     poner(vista, 'transform', `rotate(${(-h).toFixed(1)}) translate(${(-c[0]).toFixed(1)} ${(-c[1]).toFixed(1)})`);
 
     // Encuadre: la vista se ajusta para que tu coche y la plaza (con sus vecinos) llenen el
@@ -1116,7 +1136,7 @@
     const g = Math.round(Math.abs(giro));
     poner(girado, 'text', st.fase === 'guiando' && g > 0 ? `${g}° a la ${giro > 0 ? 'izquierda' : 'derecha'}` : '0°');
     poner(velocidad, 'text', Math.abs(st.vel).toFixed(0) + '°/s');
-    poner($('sentido'), 'text', !guiando || st.fuente === 'sim' || !cfg.detectarSentido ? '—' : st.sentido > 0 ? 'adelante' : st.sentido < 0 ? 'marcha atrás' : 'aún no lo sé' + (st.debugSentido ? ' (' + st.debugSentido + ')' : ''));
+    poner($('sentido'), 'text', !(st.fase === 'guiando' || st.fase === 'lista') || st.fuente === 'sim' || !cfg.detectarSentido ? '—' : st.sentido > 0 ? 'adelante' : st.sentido < 0 ? 'marcha atrás' : 'aún no lo sé' + (st.debugSentido ? ' (' + st.debugSentido + ')' : ''));
 
     const m = st.mensaje;
     const guiaTexto = st.fase === 'guiando' && cfg.linea ? GUIAS[st.etapa === 1 ? 'linea1' : 'linea2']

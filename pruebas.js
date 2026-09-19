@@ -606,5 +606,16 @@ prueba('Tolerancia exigente (±1) con el mismo conductor: no lo da por recto', a
   cierto(!e.voces().includes('Recto'));
 });
 
+
+prueba('Mover el coche hacia delante y luego hacia atrás sin girar: indica y dice el sentido las dos veces', async () => {
+  const e = await crearEntorno({ voz: true });
+  e.sensor = sensorCoche(() => 0, { acc: t => t > 5 && t < 6.2 ? [0, 0, -0.9] : t > 9 && t < 10.2 ? [0, 0, 0.9] : [0, 0, 0] });
+  e.el('principal').click(); await e.avanzar(12000);
+  const t = e.textos('sentido');
+  cierto(t.some(x => x.startsWith('adelante')), 'adelante: ' + t.slice(-3).join('|'));
+  cierto(t.some(x => x.startsWith('marcha atrás')), 'atrás: ' + t.slice(-3).join('|'));
+  cierto(e.voces().includes('Adelante') && e.voces().includes('Marcha atrás'), e.voces().join('|'));
+});
+
 /* ───────── Resumen ───────── */
 ejecutar();
