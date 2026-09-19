@@ -131,8 +131,6 @@
   .trayecto { fill: none; stroke: var(--pintura-gastada); stroke-width: 3; stroke-dasharray: 6 10; opacity: .7; }
   .nota-escena { position: absolute; left: 0; right: 0; bottom: .2rem; text-align: center; font-size: .65rem; color: var(--pintura-gastada); opacity: .8; pointer-events: none; }
   [data-tuto="1"] .lectura { display: none; }
-  .flecha-mov { fill: var(--rosa); opacity: 0; transition: opacity .3s; }
-  [data-mov="adelante"] .flecha-mov, [data-mov="atras"] .flecha-mov { opacity: .9; animation: latido 1s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
   @keyframes fluir { to { stroke-dashoffset: -32; } }
   [data-mov="adelante"] .trayecto { animation: fluir 1s linear infinite; }
   [data-mov="atras"] .trayecto { animation: fluir 1s linear infinite reverse; }
@@ -283,7 +281,7 @@
 <main class="app" id="app" data-zona="sin">
 
   <header class="cabecera">
-    <div class="marca">Escuadra<span class="sensor" id="sensor"></span><span class="sensor" id="version">v13</span></div>
+    <div class="marca">Escuadra<span class="sensor" id="sensor"></span><span class="sensor" id="version">v14</span></div>
     <div class="botones-cabecera">
       <button class="btn-ajustes" id="abrirComo" type="button">Cómo se hace</button>
       <button class="btn-ajustes" id="abrirAjustes" type="button">Ajustes</button>
@@ -326,8 +324,7 @@
         <use href="#formaCoche" class="coche" id="coche"/>
         <circle class="hombro" cx="-30" cy="-5" r="9"/>
       </g>
-      <!-- Flecha que indica hacia dónde se mueve el coche (lo nota el acelerómetro) -->
-      <g id="flechaMov"><polygon class="flecha-mov" points="0,-30 -20,0 -8,0 -8,18 8,18 8,0 20,0"/></g>
+
     </svg>
     <p class="tuto-texto" id="tutoTexto"></p>
     <p class="nota-escena">Dibujo orientativo. Solo el ángulo es real.</p>
@@ -460,7 +457,7 @@
     </fieldset>
 
     <button class="btn-cerrar" value="cerrar">Guardar y cerrar</button>
-    <p class="ayuda">Escuadra versión 13. Si en la cabecera pone otro número, recarga la app con internet.</p>
+    <p class="ayuda">Escuadra versión 14. Si en la cabecera pone otro número, recarga la app con internet.</p>
   </form>
 </dialog>
 
@@ -666,6 +663,11 @@
         if (c.t >= 0.8) { const m = c.s / c.t; if (Math.abs(m) > 0.12) fijarSentido(m > 0 ? 1 : -1); st.curva = null; }
       } else st.curva = null;
       st.debugSentido = `a ${aFwd >= 0 ? '+' : ''}${aFwd.toFixed(1)} v ${st.vFwd >= 0 ? '+' : ''}${st.vFwd.toFixed(2)}`;
+      // Velocidad para mover el coche del dibujo: integra la aceleración hacia delante y se
+      // olvida despacio mientras el coche vibra (está rodando) y deprisa si está quieto de verdad.
+      st.vibra = (st.vibra || 0) * 0.9 + Math.abs(aHor - (st.aHorAnt || 0)) * 0.1; st.aHorAnt = aHor;
+      const tau = st.vibra > 0.06 ? 4 : 0.6;
+      st.vLento = Math.max(-2.5, Math.min(2.5, ((st.vLento || 0) + aFwd * dt) * Math.exp(-dt / tau)));
     }
   }
   function fijarSentido(s) {
@@ -775,7 +777,7 @@
 
     st.giro = 0; st.giroAnterior = 0; st.tGiro = null; st.lado = 0; st.vel = 0; empezarEtapa(1);
     st.tManip = 0; st.tEstable = 0; st.mensajeMovil = false;
-    st.sentido = 0; st.arranque = null; st.curva = null; st.tReposo = 0; st.vFwd = 0;
+    st.sentido = 0; st.arranque = null; st.curva = null; st.tReposo = 0; st.vFwd = 0; st.vLento = 0; st.est = null;
     st.entrada = saliendo() ? 1 : 0; st.fase = 'guiando'; st.zona = 'lejos';
     tono(660, 90); tono(990, 120, 0.11);
     decir('Vale, gira');
@@ -1025,8 +1027,6 @@
       const mov = (st.fase === 'guiando' || st.fase === 'lista') && st.fuente !== 'sim' ? (st.vFwd || 0) : 0;
       const dirMov = mov > 0.25 ? 'adelante' : mov < -0.25 ? 'atras' : '';
       poner(app, 'data-mov', dirMov);
-      const d = dimCoche();
-      poner($('flechaMov'), 'transform', dirMov === 'atras' ? `translate(0 ${(104 * d.sy + 40).toFixed(0)}) rotate(180)` : `translate(0 ${(-104 * d.sy - 40).toFixed(0)})`);
     }
     poner(sensor, 'text', st.fuente ? FUENTES[st.fuente] : '');
 
@@ -1075,7 +1075,27 @@
       }
     }
     // Saliendo, la postura es la de entrar recorrida al revés: los grados girados se restan del objetivo.
-    if (!q) q = postura(geometria(), saliendo() ? cfg.objetivo - st.avanceDibujo : st.avanceDibujo, guiando ? st.etapa : 1, cfg.linea && guiando && st.etapa === 2 ? st.entrada2 || 0 : st.entrada);
+    const conEstima = guiando && st.fuente !== 'sim' && !st.tuto;
+    if (!q) q = postura(geometria(), saliendo() ? cfg.objetivo - st.avanceDibujo : st.avanceDibujo, guiando ? st.etapa : 1,
+                        conEstima ? 0 : (cfg.linea && guiando && st.etapa === 2 ? st.entrada2 || 0 : st.entrada));
+    // Navegación a estima (con sensores, fuera del tutorial): el coche se mueve por el plano según
+    // la velocidad estimada y el rumbo medido. Un coche no puede girar sin rodar: girando, la
+    // velocidad es al menos la del arco a tope de volante, y la posición se corrige hacia la
+    // trayectoria geométrica. En recto manda solo el movimiento medido: si no te mueves, no se mueve.
+    if (conEstima) {
+      const D = dimCoche();
+      if (!st.est) st.est = { p: q.p.slice(), t: ahora };
+      const dtE = Math.min(0.1, Math.max(0, (ahora - st.est.t) / 1000)); st.est.t = ahora;
+      const girando = Math.abs(st.vel) > 3;
+      const vGiro = Math.abs(st.vel) * Math.PI / 180 * D.R / U;
+      const vAcc = st.vLento || 0;
+      const atrasMov = cfg.linea ? true : (saliendo() ? !entraAtras() : entraAtras());
+      const signo = Math.abs(vAcc) > 0.15 ? Math.sign(vAcc) : (st.sentido || (atrasMov ? -1 : 1));
+      const v = signo * Math.max(Math.abs(vAcc), girando ? vGiro : 0);
+      st.est.p = suma(st.est.p, detras(q.h), -v * dtE * U);
+      if (girando) st.est.p = suma(st.est.p, suma(q.p, st.est.p, -1), Math.min(1, 0.6 * dtE));
+      q = { h: q.h, p: st.est.p };
+    } else st.est = null;
     poner(app, 'data-tuto', st.tuto ? '1' : '0');
     poner(app, 'data-refs', refs);
     poner($('tutoTexto'), 'text', tutoTexto);
@@ -1084,7 +1104,7 @@
     if (!plazaDerecha) { c = [-c[0], c[1]]; h = -h; }
     // Pequeño desplazamiento del coche en el sentido en que se mueve (lo nota el acelerómetro),
     // para que se vea que avanza o retrocede aunque la posición real no se pueda medir.
-    const vMov = st.fuente !== 'sim' && (st.fase === 'guiando' || st.fase === 'lista') ? Math.max(-1, Math.min(1, st.vFwd || 0)) : 0;
+    const vMov = !conEstima && st.fuente !== 'sim' && st.fase === 'lista' ? Math.max(-1, Math.min(1, st.vFwd || 0)) : 0;
     st.despMov = (st.despMov || 0) + (vMov * 40 - (st.despMov || 0)) * 0.1;
     c = suma(c, detras(h), -st.despMov);
     poner(vista, 'transform', `rotate(${(-h).toFixed(1)}) translate(${(-c[0]).toFixed(1)} ${(-c[1]).toFixed(1)})`);

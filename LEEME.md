@@ -71,8 +71,11 @@ una silueta tenue en el sitio donde tiene que acabar tu coche y una línea de pu
 trayectoria. Tu coche es rosa, verde cuando está recto y ámbar si te has pasado. Si giras hacia el
 otro lado, la escena se pone en espejo sola.
 
-En batería y espiga el giro termina en la boca de la plaza y el último tramo se hace recto: cuando
-la app dice "recto", el dibujo mete el coche derecho en su sitio.
+Con sensores, el coche del dibujo se mueve por **navegación a estima**: la app estima la velocidad
+con el acelerómetro (y con el giro, porque un coche no puede girar sin rodar) y lo desplaza en la
+dirección a la que apunta. Girando, la posición se corrige hacia la trayectoria geométrica; en recto
+manda solo el movimiento medido: si no te mueves, no se mueve. La distancia estimada con un móvil
+deriva al cabo de unos segundos, así que la posición es orientativa; el ángulo sí es exacto.
 
 **Es orientativo.** Lo único medido es el ángulo. La posición sale del tamaño de coche elegido en
 Ajustes > **Mi coche** (pequeño, mediano o grande; por defecto pequeño, tipo Smart) suponiendo el

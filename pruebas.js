@@ -617,5 +617,21 @@ prueba('Mover el coche hacia delante y luego hacia atrás sin girar: indica y di
   cierto(e.voces().includes('Adelante') && e.voces().includes('Marcha atrás'), e.voces().join('|'));
 });
 
+
+prueba('Dibujo con navegación a estima: recto hacia atrás 1 s mueve el coche; parado, no se mueve; al girar acaba en la plaza', async () => {
+  const e = await crearEntorno({ voz: false, atras: true });
+  const pos = () => { const t = e.el('vista').attrs.transform || ''; return t.slice(t.indexOf('translate(') + 10, t.lastIndexOf(')')).split(' ').map(Number); };
+  e.sensor = sensorCoche(rampa(12, 15, 90, 1), { acc: t => t > 5 && t < 6 ? [0, 0, 0.9] : [0, 0, 0] });   // 1 s acelerando hacia atrás
+  e.el('principal').click(); await e.avanzar(4500);
+  const p0 = pos(); await e.avanzar(3000); const p1 = pos();
+  const d1 = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]);
+  cierto(d1 > 15, 'no se movió al ir hacia atrás: ' + d1.toFixed(1));
+  await e.avanzar(3000); const p2 = pos();
+  const d2 = Math.hypot(p2[0] - p1[0], p2[1] - p1[1]);
+  cierto(d2 < 6, 'se mueve parado: ' + d2.toFixed(1));
+  await e.avanzar(12000);
+  cierto(e.textos('cifra').includes('Recto'));
+});
+
 /* ───────── Resumen ───────── */
 ejecutar();
