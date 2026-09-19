@@ -77,9 +77,6 @@
     background: var(--asfalto-claro); font-weight: 600; font-size: .9375rem;
   }
   .botones-cabecera { display: flex; gap: .5rem; flex-wrap: wrap; justify-content: flex-end; }
-  .medidas { display: grid; grid-template-columns: repeat(3, 1fr); gap: .5rem; }
-  .medidas label { display: grid; gap: .25rem; font-size: .8125rem; color: var(--pintura-gastada); }
-  .medidas input { font: inherit; color: var(--pintura); background: var(--asfalto-hondo); border: 0; border-radius: .5rem; padding: .5rem; width: 100%; min-width: 0; }
 
   /* Tutorial animado ("Cómo se hace"): rótulo sobre el dibujo, referencias y punto del hombro */
   .esfera { position: relative; }
@@ -238,7 +235,7 @@
 <main class="app" id="app" data-zona="sin">
 
   <header class="cabecera">
-    <div class="marca">Escuadra<span class="sensor" id="sensor"></span><span class="sensor" id="version">v7</span></div>
+    <div class="marca">Escuadra<span class="sensor" id="sensor"></span><span class="sensor" id="version">v8</span></div>
     <div class="botones-cabecera">
       <button class="btn-ajustes" id="abrirComo" type="button">Cómo se hace</button>
       <button class="btn-ajustes" id="abrirAjustes" type="button">Ajustes</button>
@@ -349,19 +346,12 @@
 
     <fieldset>
       <legend>Mi coche</legend>
-      <p class="ayuda">Con las medidas de tu coche, la trayectoria y el punto de parada del dibujo salen exactos.</p>
       <div class="opciones">
-        <label><input type="radio" name="cochePreset" value="smart">Smart Fortwo<small>2,69 m · gira en 6,95 m</small></label>
-        <label><input type="radio" name="cochePreset" value="pequeno">Pequeño<small>3,9 m · gira en 10,4 m</small></label>
-        <label><input type="radio" name="cochePreset" value="medio">Medio<small>4,4 m · gira en 11 m</small></label>
-        <label><input type="radio" name="cochePreset" value="grande">Grande<small>4,8 m · gira en 11,8 m</small></label>
+        <label><input type="radio" name="cochePreset" value="pequeno">Pequeño<small>Smart, Fiat 500, Twingo</small></label>
+        <label><input type="radio" name="cochePreset" value="mediano">Mediano<small>Ibiza, Clio, Golf</small></label>
+        <label><input type="radio" name="cochePreset" value="grande">Grande<small>berlina, SUV</small></label>
       </div>
-      <div class="medidas">
-        <label>Largo (m)<input type="number" id="cocheLargo" step="0.01" min="2" max="6" inputmode="decimal"></label>
-        <label>Ancho (m)<input type="number" id="cocheAncho" step="0.01" min="1.4" max="2.2" inputmode="decimal"></label>
-        <label>Giro (m)<input type="number" id="cocheGiro" step="0.1" min="5" max="14" inputmode="decimal"></label>
-      </div>
-      <p class="ayuda">"Giro" es el diámetro de giro entre bordillos, que viene en la ficha técnica del coche.</p>
+      <p class="ayuda">Con el tamaño del coche, la trayectoria y el punto de parada del dibujo se ajustan a él.</p>
     </fieldset>
 
     <fieldset>
@@ -382,7 +372,7 @@
     </fieldset>
 
     <button class="btn-cerrar" value="cerrar">Guardar y cerrar</button>
-    <p class="ayuda">Escuadra versión 7. Si en la cabecera pone otro número, recarga la app con internet.</p>
+    <p class="ayuda">Escuadra versión 8. Si en la cabecera pone otro número, recarga la app con internet.</p>
   </form>
 </dialog>
 
@@ -396,7 +386,7 @@
     objetivo: 90, linea: false, tolerancia: 2,
     sonido: true, voz: true, cantar: false, anticipar: true, aprender: true, aprendido: 0,
     camara: false, atras: false, detectarSentido: true, invertir: false, sim: false,
-    coche: { largo: 2.69, ancho: 1.66, giro: 6.95 },   // Smart Fortwo
+    tamano: 'pequeno', coche: { largo: 3.0, ancho: 1.66, giro: 8.0 },
   };
   const cfg = Object.assign({}, porDefecto, leerAjustes());
 
@@ -544,8 +534,21 @@
       const dot = st.G[0] * upO[0] + st.G[1] * upO[1] + st.G[2] * upO[2];
       if (Math.abs(dot) > 0.3 * n) st.sg = dot > 0 ? 1 : -1;
       const sg = st.sg || (ES_IOS ? -1 : 1);
-      const lin = [(g[0] - st.G[0]) * sg, (g[1] - st.G[1]) * sg, (g[2] - st.G[2]) * sg];
       const up = st.upDev ? st.upDev.slice() : [st.G[0] * sg / n, st.G[1] * sg / n, st.G[2] * sg / n];
+      // Aceleración sin gravedad: mejor la que calcula el sistema (quita la gravedad con el
+      // giroscopio, así inclinar el móvil no se cuela como aceleración). Si no la da, se usa la
+      // gravedad calibrada. Su signo se comprueba: aIG - acc tiene que ser la gravedad, hacia arriba.
+      const acc = e.acceleration;
+      let lin;
+      if (acc && acc.x != null) {
+        const d = [g[0] - acc.x, g[1] - acc.y, g[2] - acc.z];
+        const dd = d[0] * up[0] + d[1] * up[1] + d[2] * up[2];
+        if (Math.abs(dd) > 3) st.sgAcc = dd > 0 ? 1 : -1;
+        const s2 = st.sgAcc || sg;
+        lin = [acc.x * s2, acc.y * s2, acc.z * s2];
+      } else {
+        lin = [(g[0] - st.G[0]) * sg, (g[1] - st.G[1]) * sg, (g[2] - st.G[2]) * sg];
+      }
       const horiz = v => { const p = v[0] * up[0] + v[1] * up[1] + v[2] * up[2]; return [v[0] - p * up[0], v[1] - p * up[1], v[2] - p * up[2]]; };
       const hz = horiz([0, 0, 1]), hy = horiz([0, 1, 0]);
       const mz = Math.hypot(hz[0], hz[1], hz[2]), my = Math.hypot(hy[0], hy[1], hy[2]) || 1;
@@ -555,19 +558,24 @@
       const aLat = lin[0] * izquierda[0] + lin[1] * izquierda[1] + lin[2] * izquierda[2];
       const aHor = Math.hypot(aFwd, aLat);
 
-      // Pista 1: arranque desde parado (más de 1 s quieto), se integra 1,2 s la aceleración.
-      if (aHor < 0.25) st.tReposo = (st.tReposo || 0) + dt;
-      else { if (st.arranque == null && (st.tReposo || 0) > 1) st.arranque = { t: 0, v: 0 }; st.tReposo = 0; }
+      // Pista 1: arranque desde parado (0,7 s quieto), se integra 1 s la aceleración.
+      if (aHor < 0.35) st.tReposo = (st.tReposo || 0) + dt;
+      else { if (st.arranque == null && (st.tReposo || 0) > 0.7) st.arranque = { t: 0, v: 0 }; st.tReposo = 0; }
       if (st.arranque) {
         st.arranque.t += dt; st.arranque.v += aFwd * dt;
-        if (st.arranque.t >= 1.2) { if (Math.abs(st.arranque.v) > 0.25) fijarSentido(st.arranque.v > 0 ? 1 : -1); st.arranque = null; }
+        if (st.arranque.t >= 1) { if (Math.abs(st.arranque.v) > 0.2) fijarSentido(st.arranque.v > 0 ? 1 : -1); st.arranque = null; }
       }
-      // Pista 2: en curva (más de 8°/s durante 1 s), signo de la aceleración lateral por el del giro.
+      // Pista 2: velocidad hacia delante integrada con fuga (se olvida en unos 3 s): no necesita
+      // una parada limpia antes.
+      st.vFwd = ((st.vFwd || 0) + aFwd * dt) * Math.max(0, 1 - dt / 3);
+      if (Math.abs(st.vFwd) > 0.35) fijarSentido(st.vFwd > 0 ? 1 : -1);
+      // Pista 3: en curva (más de 8°/s durante 0,8 s), signo de la aceleración lateral por el del giro.
       if (Math.abs(st.vel) > 8) {
         const c = st.curva || (st.curva = { t: 0, s: 0 });
         c.t += dt; c.s += aLat * (st.vel > 0 ? 1 : -1) * dt;
-        if (c.t >= 1) { const m = c.s / c.t; if (Math.abs(m) > 0.15) fijarSentido(m > 0 ? 1 : -1); st.curva = null; }
+        if (c.t >= 0.8) { const m = c.s / c.t; if (Math.abs(m) > 0.12) fijarSentido(m > 0 ? 1 : -1); st.curva = null; }
       } else st.curva = null;
+      st.debugSentido = `a ${aFwd >= 0 ? '+' : ''}${aFwd.toFixed(1)} v ${st.vFwd >= 0 ? '+' : ''}${st.vFwd.toFixed(2)}`;
     }
   }
   function fijarSentido(s) { st.sentido = s; }
@@ -664,7 +672,7 @@
 
     st.giro = 0; st.giroAnterior = 0; st.tGiro = null; st.lado = 0; st.vel = 0; empezarEtapa(1);
     st.tManip = 0; st.tEstable = 0; st.mensajeMovil = false;
-    st.sentido = 0; st.arranque = null; st.curva = null; st.tReposo = 0;
+    st.sentido = 0; st.arranque = null; st.curva = null; st.tReposo = 0; st.vFwd = 0;
     st.fase = 'guiando'; st.zona = 'lejos';
     tono(660, 90); tono(990, 120, 0.11);
     decir('Vale, gira');
@@ -718,7 +726,7 @@
   function objetivoEtapa() { return cfg.linea ? ANGULO_LINEA : cfg.objetivo; }
 
   function empezarEtapa(n) {
-    st.etapa = n; st.maxAvance = 0;
+    st.etapa = n; st.maxAvance = 0; st.entrada2 = 0;
     st.enderezaAvisado = false; st.aprendizaje = null; st.vozUmbral = 0; st.proximoPitido = 0;
   }
 
@@ -900,8 +908,12 @@
     // Tramo recto final (batería/espiga): una vez recto, el coche entra derecho en la plaza.
     const dtFrame = st.tPintado == null ? 0 : Math.min(0.1, (ahora - st.tPintado) / 1000);
     st.tPintado = ahora;
-    const entrando = guiando && !cfg.linea && st.zona === 'ok';
-    st.entrada = Math.max(0, Math.min(1, (st.entrada || 0) + dtFrame * (entrando ? 0.45 : -1.5)));
+    // (En línea, el mismo contador anima el tramo recto a 45° mientras estás en los 45°.)
+    // En batería: entrar recto hasta el fondo. En línea, etapa 1: tramo recto a 45°; etapa 2:
+    // avanzar hasta centrarse. Cada etapa lleva su contador.
+    const entrando = guiando && st.zona === 'ok';
+    if (cfg.linea && guiando && st.etapa === 2) st.entrada2 = Math.max(0, Math.min(1, (st.entrada2 || 0) + dtFrame * (entrando ? 0.45 : -1.5)));
+    else st.entrada = Math.max(0, Math.min(1, (st.entrada || 0) + dtFrame * (entrando ? 0.45 : -1.5)));
     // Tutorial animado: manda sobre la medida mientras dura.
     let q = null, tutoTexto = '', refs = '0';
     if (st.tuto) {
@@ -913,7 +925,7 @@
         tutoTexto = p.texto; refs = p.refs ? (cfg.linea ? 'trasera' : 'hombro') : '0';
       }
     }
-    if (!q) q = postura(geometria(), st.avanceDibujo, guiando ? st.etapa : 1, st.entrada);
+    if (!q) q = postura(geometria(), st.avanceDibujo, guiando ? st.etapa : 1, cfg.linea && guiando && st.etapa === 2 ? st.entrada2 || 0 : st.entrada);
     poner(app, 'data-tuto', st.tuto ? '1' : '0');
     poner(app, 'data-refs', refs);
     poner($('tutoTexto'), 'text', tutoTexto);
@@ -969,7 +981,7 @@
     const g = Math.round(Math.abs(giro));
     poner(girado, 'text', st.fase === 'guiando' && g > 0 ? `${g}° a la ${giro > 0 ? 'izquierda' : 'derecha'}` : '0°');
     poner(velocidad, 'text', Math.abs(st.vel).toFixed(0) + '°/s');
-    poner($('sentido'), 'text', !guiando || st.fuente === 'sim' || !cfg.detectarSentido ? '—' : st.sentido > 0 ? 'adelante' : st.sentido < 0 ? 'marcha atrás' : 'aún no lo sé');
+    poner($('sentido'), 'text', !guiando || st.fuente === 'sim' || !cfg.detectarSentido ? '—' : st.sentido > 0 ? 'adelante' : st.sentido < 0 ? 'marcha atrás' : 'aún no lo sé' + (st.debugSentido ? ' (' + st.debugSentido + ')' : ''));
 
     const m = st.mensaje;
     const guiaTexto = st.fase === 'guiando' && cfg.linea ? GUIAS[st.etapa === 1 ? 'linea1' : 'linea2'] : GUIAS[st.fase];
@@ -1016,11 +1028,26 @@
     const { EJE, R: R_GIRO, ANCHO, RECTA_FRENTE, RECTA_ATRAS } = dimCoche();
     if (cfg.linea) {
       // Final: en el hueco, rumbo -90 (mirando a la izquierda, sentido de la calle).
-      const rearF = [EJE, 0];
-      const C2 = suma(rearF, [0, R_GIRO]);                     // pivote del contragiro (volante a la izquierda)
-      const rearMid = suma(C2, rot(suma(rearF, C2, -1), -45)); // eje trasero cuando el coche está a 45°
-      const C1 = suma(rearMid, derecha(-135), R_GIRO);         // pivote del primer giro (volante a la derecha)
-      return { rearF, C2, rearMid, C1 };
+      const { LARGO } = dimCoche();
+      const gapMedio = 0.8 * LARGO;                               // hueco de 1,6 largos entre los dos coches
+      const sep = gapMedio + 104;                                 // centro de los coches vecinos
+      const rearF = [EJE, 0];                                     // sitio final, centrado en el hueco
+      // El contragiro termina más atrás (x mayor): lo justo para que el vértice delantero del lado
+      // de la acera libre la esquina del coche de delante mientras gira, sin que la trasera toque
+      // al de detrás. Después se avanza recto hasta el centro.
+      const rNariz = Math.hypot(EJE + LARGO / 2, ANCHO / 2 + R_GIRO);
+      const xMin = Math.sqrt(Math.max(0, (rNariz + 6) ** 2 - (46 - R_GIRO) ** 2)) - gapMedio;
+      const xMax = gapMedio - 8 - (LARGO / 2 - EJE);
+      const rearE = [Math.min(Math.max(EJE, xMin), xMax), 0];    // eje trasero al acabar el contragiro
+      const C2 = suma(rearE, [0, R_GIRO]);                        // pivote del contragiro (volante a la izquierda)
+      const rearMid2 = suma(C2, rot(suma(rearE, C2, -1), -45));   // eje trasero al empezar el contragiro
+      // Entre los dos giros hay un tramo recto a 45°, el que haga falta para que al empezar el
+      // coche esté a 0,6 m del coche de delante (dos giros de radio R solo desplazan 0,59·R).
+      const y0 = 46 + 30 + ANCHO / 2;
+      const s = Math.max(0, (y0 - 2 * R_GIRO * (1 - Math.SQRT1_2)) / Math.SQRT1_2);
+      const rearMid1 = suma(rearMid2, detras(-135), -s);          // eje trasero al acabar el primer giro
+      const C1 = suma(rearMid1, derecha(-135), R_GIRO);           // pivote del primer giro (volante a la derecha)
+      return { rearF, rearE, C2, rearMid1, rearMid2, C1, s, sep };
     }
     // Batería/espiga: partiendo por el carril (rumbo -90) con la plaza a la derecha. De frente
     // el rumbo gira en sentido horario; marcha atrás, con el volante a la derecha, el morro
@@ -1052,8 +1079,10 @@
   function postura(g, avance, etapa, entrada = 0) {
     if (cfg.linea) {
       const h = -90 - avance;
-      if (etapa === 1) return { h, p: suma(g.C1, rot(suma(g.rearMid, g.C1, -1), 45 - avance)) };
-      return { h, p: suma(g.C2, rot(suma(g.rearF, g.C2, -1), -avance)) };
+      // En la etapa 1, "entrada" (0..1) es lo recorrido del tramo recto a 45°.
+      if (etapa === 1) return { h, p: suma(suma(g.C1, rot(suma(g.rearMid1, g.C1, -1), 45 - avance)), detras(-135), g.s * entrada) };
+      // En la etapa 2, "entrada" es lo avanzado del tramo final recto hasta centrarse en el hueco.
+      return { h, p: suma(suma(g.C2, rot(suma(g.rearE, g.C2, -1), -avance)), suma(g.rearF, g.rearE, -1), entrada) };
     }
     const falta = cfg.objetivo - avance;
     let p = suma(g.C, rot(suma(g.rearE, g.C, -1), g.s * falta));
@@ -1077,7 +1106,7 @@
     };
     const g = geometria();
     const { EJE, LARGO, sx, sy } = dimCoche(), esc = `${sx} ${sy}`;
-    const sep = 0.75 * LARGO + 104;   // en línea: hueco de vez y media el largo del coche
+    const sep = cfg.linea ? g.sep : 0;
 
     if (cfg.linea) {
       add('rect', { class: 'acera', x: -3000, y: -3000, width: 6000, height: 2940 });
@@ -1101,7 +1130,13 @@
     const N = 48;
     for (let i = 0; i <= N + (cfg.linea ? 0 : 1); i++) {
       let avance, etapa = 1, entrada = 0;
-      if (cfg.linea) { const t = i / N * 90; etapa = t <= 45 ? 1 : 2; avance = t <= 45 ? t : 90 - t; }
+      if (cfg.linea) {
+        const t = i / N * 100;
+        if (t <= 35) { avance = t / 35 * 45; }
+        else if (t <= 50) { avance = 45; entrada = (t - 35) / 15; }
+        else if (t <= 88) { etapa = 2; avance = 45 * (1 - (t - 50) / 38); }
+        else { etapa = 2; avance = 0; entrada = (t - 88) / 12; }
+      }
       else { avance = Math.min(i, N) / N * cfg.objetivo; entrada = i > N ? 1 : 0; }
       const q = postura(g, avance, etapa, entrada), c = suma(q.p, detras(q.h), -EJE);
       d += (i ? ' L' : 'M') + c[0].toFixed(1) + ',' + c[1].toFixed(1);
@@ -1278,22 +1313,16 @@
     $('aprendidoTexto').textContent = textoAprendido();
     $('optAtras').checked = cfg.atras;   $('optInvertir').checked = cfg.invertir;
     $('optSentido').checked = cfg.detectarSentido;
-    const co = cfg.coche || porDefecto.coche;
-    $('cocheLargo').value = co.largo; $('cocheAncho').value = co.ancho; $('cocheGiro').value = co.giro;
-    dlg.querySelectorAll('[name=cochePreset]').forEach(r => { const p = COCHES[r.value]; r.checked = p.largo === co.largo && p.ancho === co.ancho && p.giro === co.giro; });
+    dlg.querySelectorAll('[name=cochePreset]').forEach(r => r.checked = r.value === (cfg.tamano || 'pequeno'));
     $('optSim').checked = cfg.sim;
   }
   $('abrirAjustes').addEventListener('click', () => { sincronizarAjustes(); dlg.showModal(); });
+  // Tamaños de coche: largo, ancho y diámetro de giro entre bordillos (m).
   const COCHES = {
-    smart: { largo: 2.69, ancho: 1.66, giro: 6.95 }, pequeno: { largo: 3.9, ancho: 1.7, giro: 10.4 },
-    medio: { largo: 4.4, ancho: 1.8, giro: 11 },     grande: { largo: 4.8, ancho: 1.9, giro: 11.8 },
+    pequeno: { largo: 3.0, ancho: 1.66, giro: 8.0 },
+    mediano: { largo: 4.2, ancho: 1.8, giro: 10.8 },
+    grande:  { largo: 4.8, ancho: 1.9, giro: 11.8 },
   };
-  dlg.querySelectorAll('[name=cochePreset]').forEach(r => r.addEventListener('change', () => {
-    const p = COCHES[r.value]; $('cocheLargo').value = p.largo; $('cocheAncho').value = p.ancho; $('cocheGiro').value = p.giro;
-  }));
-  for (const id of ['cocheLargo', 'cocheAncho', 'cocheGiro']) $(id).addEventListener('input', () => {
-    dlg.querySelectorAll('[name=cochePreset]').forEach(r => r.checked = false);
-  });
 
   /* ───────────── Tutorial animado: "Cómo se hace" ─────────────
      Una maniobra de ejemplo dibujada en la propia escena, paso a paso, con un rótulo corto:
@@ -1304,10 +1333,11 @@
       { d: 2.5, texto: 'Acércate al hueco despacio', f: alejar },
       { d: 3.5, texto: 'Para aquí: trasera con trasera, a medio metro. Pulsa «Estoy recto»', f: () => ({}), refs: true },
       { d: 4, texto: 'Volante a tope hacia la acera. Marcha atrás despacio', f: u => ({ avance: 45 * u }) },
-      { d: 2, texto: '«Volante al otro lado»: gira a tope hacia el otro lado', f: () => ({ avance: 45 }) },
-      { d: 4, texto: 'Sigue marcha atrás', f: u => ({ avance: 45 * (1 - u), etapa: 2 }) },
-      { d: 2.5, texto: '«Recto»: volante derecho y avanza un poco para centrarte', f: () => ({ etapa: 2 }) },
-      { d: 2, texto: 'Ya está. Toca para cerrar', f: () => ({ etapa: 2 }) },
+      { d: 2, texto: 'A 45°: volante derecho y sigue atrás un poco', f: u => ({ avance: 45, entrada: u }) },
+      { d: 2, texto: '«Volante al otro lado»: gira a tope hacia el otro lado', f: () => ({ avance: 45, entrada: 1 }) },
+      { d: 4, texto: 'Sigue marcha atrás', f: u => ({ avance: 45 * (1 - u), etapa: 2, entrada: 0 }) },
+      { d: 2.5, texto: '«Recto»: volante derecho y avanza un poco para centrarte', f: u => ({ etapa: 2, entrada: u }) },
+      { d: 2, texto: 'Ya está. Toca para cerrar', f: () => ({ etapa: 2, entrada: 1 }) },
     ];
     const atras = entraAtras();
     return [
@@ -1349,9 +1379,8 @@
     cfg.camara = $('optCamara').checked;
     cfg.atras  = $('optAtras').checked;  cfg.invertir = $('optInvertir').checked;
     cfg.detectarSentido = $('optSentido').checked;
-    const num =(id, ant, min, max) => { const v = parseFloat($(id).value); return isFinite(v) && v >= min && v <= max ? v : ant; };
-    const co0 = cfg.coche || porDefecto.coche;
-    cfg.coche = { largo: num('cocheLargo', co0.largo, 2, 6), ancho: num('cocheAncho', co0.ancho, 1.4, 2.2), giro: num('cocheGiro', co0.giro, 5, 14) };
+    cfg.tamano = (dlg.querySelector('[name=cochePreset]:checked') || { value: 'pequeno' }).value;
+    cfg.coche = COCHES[cfg.tamano] || COCHES.pequeno;
     cfg.sim    = $('optSim').checked;
     guardarAjustes(); iniciarAudio();
 
